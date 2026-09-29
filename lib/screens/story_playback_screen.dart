@@ -1,0 +1,1113 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
+import '../core/app_assets.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_typography.dart';
+import '../widgets/back_header.dart';
+import '../widgets/glass_icon_button.dart';
+
+/// Immutable content for a single narrated sea story. The playback screen is
+/// driven entirely by this model so it can host any story in the catalog, not
+/// just the featured "Lighthouse at Cape Horn".
+///
+/// Stage 1 is visual-only: durations/progress are static presentation values
+/// (no real audio engine yet), but the shape is ready for a later stage to
+/// bind to an actual player.
+class StoryData {
+  const StoryData({
+    required this.title,
+    required this.series,
+    required this.narrator,
+    required this.coordinates,
+    required this.swellNote,
+    required this.vibeTags,
+    required this.chapterProgress,
+    required this.chapterNumber,
+    required this.chapterTitle,
+    required this.chapterTimestamp,
+    required this.excerpt,
+    required this.currentTime,
+    required this.remainingTime,
+    required this.progress,
+    this.tuningNote = '432Hz Tuning Active',
+  });
+
+  final String title;
+  final String series;
+  final String narrator;
+  final String coordinates;
+  final String swellNote;
+  final List<StoryVibe> vibeTags;
+  final String chapterProgress; // e.g. "Chapter 2 of 4"
+  final int chapterNumber; // e.g. 2
+  final String chapterTitle; // e.g. "The Keeper's Lantern"
+  final String chapterTimestamp; // e.g. "08:42 — 22:00"
+  final List<String> excerpt; // one entry per paragraph
+  final String currentTime; // e.g. "08:42"
+  final String remainingTime; // e.g. "-13:18"
+  final double progress; // 0..1 of the current chapter
+  final String tuningNote;
+}
+
+/// A labelled mood/voice chip shown beneath the story title.
+class StoryVibe {
+  const StoryVibe(this.icon, this.label, this.color);
+
+  final IconData icon;
+  final String label;
+  final Color color;
+}
+
+/// Catalog of narrated sea stories. Stage 1 only fully authors the featured
+/// Lighthouse tale; the others carry enough data to render the same player.
+abstract final class SeaStories {
+  static const StoryData lighthouse = StoryData(
+    title: 'The Lighthouse at Cape Horn',
+    series: 'Tales of the Roaring Forties',
+    narrator: 'Capt. Torben Lind',
+    coordinates: "55°58′S • 67°17′W",
+    swellNote: 'Cape Horn Swell 2.4m',
+    vibeTags: [
+      StoryVibe(Icons.nightlight_round, 'Deep Sleep', AppColors.seafoam),
+      StoryVibe(Icons.mic_none, 'Warm Baritone', AppColors.sand),
+      StoryVibe(Icons.headphones, 'Binaural Ocean Waves', AppColors.teal),
+    ],
+    chapterProgress: 'Chapter 2 of 4',
+    chapterNumber: 2,
+    chapterTitle: "The Keeper's Lantern",
+    chapterTimestamp: '08:42 — 22:00',
+    excerpt: [
+      '"The wick catches with a soft crackle, shielded from forty knots of '
+          'Antarctic gale by two inches of frosted Belgian plate glass. Below, '
+          'the dark Drake Passage rolls on in ceaseless, rhythmic breathing..."',
+      'Listen closely as Captain Torben details the ancient clockwork '
+          'counterweights that kept the prism rotating without shore power for '
+          'one hundred and twelve solitary winters. Let the steady pendulum '
+          'swing settle your pulse.',
+    ],
+    currentTime: '08:42',
+    remainingTime: '-13:18',
+    progress: 0.4,
+  );
+
+  static const StoryData starsOverPacific = StoryData(
+    title: 'Stars Over the Pacific',
+    series: 'Horizon Tales',
+    narrator: 'Amaia Rangi',
+    coordinates: "09°12′S • 140°06′W",
+    swellNote: 'Gentle Tide Drift 0.8m',
+    vibeTags: [
+      StoryVibe(Icons.nightlight_round, 'Deep Sleep', AppColors.seafoam),
+      StoryVibe(Icons.headphones, 'Soft Tide Drift', AppColors.teal),
+    ],
+    chapterProgress: 'Chapter 1 of 3',
+    chapterNumber: 1,
+    chapterTitle: 'Reading the Swell',
+    chapterTimestamp: '00:00 — 18:00',
+    excerpt: [
+      '"The navigators of old read the ocean like a page — each long swell a '
+          'sentence pointing home beneath the wheeling Southern stars."',
+    ],
+    currentTime: '00:00',
+    remainingTime: '-18:00',
+    progress: 0.0,
+  );
+
+  static const StoryData stElmosLight = StoryData(
+    title: "St. Elmo's Light",
+    series: 'Horizon Tales',
+    narrator: 'Old Deck Folklore',
+    coordinates: "48°20′N • 05°45′W",
+    swellNote: 'Light Drizzle on Rigging',
+    vibeTags: [
+      StoryVibe(Icons.nightlight_round, 'Restless Watch', AppColors.seafoam),
+      StoryVibe(Icons.mic_none, 'Soft Lullaby', AppColors.sand),
+    ],
+    chapterProgress: 'Chapter 1 of 2',
+    chapterNumber: 1,
+    chapterTitle: 'A Glow on the Mast',
+    chapterTimestamp: '00:00 — 15:00',
+    excerpt: [
+      '"They say the pale blue fire that dances on the masthead is a saint\'s '
+          'own blessing — a quiet light for the sleepless on anchor watch."',
+    ],
+    currentTime: '00:00',
+    remainingTime: '-15:00',
+    progress: 0.0,
+  );
+}
+
+/// Story playback session (Stitch "story_lighthouse_cape_horn" redesign).
+///
+/// Stage 1: fully static/visual — the transport controls, scrubber, tuning
+/// toggles and sleep timer are presentational placeholders. No real audio is
+/// played. A later stage will bind these to a player.
+class StoryPlaybackScreen extends StatefulWidget {
+  const StoryPlaybackScreen({super.key, required this.story});
+
+  final StoryData story;
+
+  @override
+  State<StoryPlaybackScreen> createState() => _StoryPlaybackScreenState();
+}
+
+class _StoryPlaybackScreenState extends State<StoryPlaybackScreen> {
+  static const List<String> _speeds = ['0.8x Pace', '1.0x Pace', '1.2x Pace'];
+  static const List<String> _timers = [
+    '15m Sleep Timer',
+    '30m Sleep Timer',
+    '45m Sleep Timer',
+    'Timer Off',
+  ];
+
+  bool _isPlaying = true;
+  bool _isFavourite = false;
+  bool _gentleFadeout = true;
+  int _speedIndex = 1;
+  int _timerIndex = 1;
+  double _blend = 45;
+  bool _excerptExpanded = true;
+
+  StoryData get _story => widget.story;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: AppColors.appBackgroundGradient,
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              BackHeader(
+                title: 'Story Playback Session',
+                trailing: GlassIconButton(
+                  icon: AppAssets.sparkles,
+                  iconColor: AppColors.cream,
+                  onTap: () {},
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _UtilityBar(
+                        timerLabel: _timers[_timerIndex],
+                        onTimer: () => setState(
+                          () => _timerIndex = (_timerIndex + 1) % _timers.length,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _CoverArt(story: _story),
+                      const SizedBox(height: 16),
+                      _TrackDetails(
+                        story: _story,
+                        favourite: _isFavourite,
+                        onFavourite: () =>
+                            setState(() => _isFavourite = !_isFavourite),
+                      ),
+                      const SizedBox(height: 16),
+                      _Waveform(progress: _story.progress),
+                      const SizedBox(height: 8),
+                      _Scrubber(
+                        currentTime: _story.currentTime,
+                        remainingTime: _story.remainingTime,
+                        chapterProgress: _story.chapterProgress,
+                        value: _story.progress,
+                      ),
+                      const SizedBox(height: 8),
+                      _TransportControls(
+                        isPlaying: _isPlaying,
+                        onPlayPause: () =>
+                            setState(() => _isPlaying = !_isPlaying),
+                      ),
+                      const SizedBox(height: 16),
+                      _TuningCard(
+                        speedLabel: _speeds[_speedIndex],
+                        onSpeed: () => setState(
+                          () => _speedIndex = (_speedIndex + 1) % _speeds.length,
+                        ),
+                        gentleFadeout: _gentleFadeout,
+                        onFadeout: (v) => setState(() => _gentleFadeout = v),
+                        blend: _blend,
+                        onBlend: (v) => setState(() => _blend = v),
+                      ),
+                      const SizedBox(height: 16),
+                      _ChapterCard(
+                        story: _story,
+                        expanded: _excerptExpanded,
+                        onToggle: () => setState(
+                          () => _excerptExpanded = !_excerptExpanded,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const _FooterDecks(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Utility bar (offline chip + sleep timer)
+// ---------------------------------------------------------------------------
+
+class _UtilityBar extends StatelessWidget {
+  const _UtilityBar({required this.timerLabel, required this.onTimer});
+
+  final String timerLabel;
+  final VoidCallback onTimer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Flexible(
+          child: _Pill(
+            icon: Icons.cloud_done_outlined,
+            label: 'Offline Cached',
+            color: AppColors.seafoam,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: _Pill(
+            icon: Icons.bedtime_outlined,
+            label: timerLabel,
+            color: AppColors.sand,
+            onTap: onTimer,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.glassFill,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: AppTextStyles.caption.copyWith(color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return pill;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+      child: pill,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cover art
+// ---------------------------------------------------------------------------
+
+class _CoverArt extends StatelessWidget {
+  const _CoverArt({required this.story});
+
+  final StoryData story;
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.welcomeMid, AppColors.deepNavy],
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: AppColors.cardShadow,
+              offset: Offset(0, 12),
+              blurRadius: 20,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+          child: Stack(
+            children: [
+              // Decorative beacon motif (no bundled photo in Stage 1).
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0, -0.3),
+                      radius: 0.9,
+                      colors: [
+                        AppColors.sand.withValues(alpha: 0.28),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Center(
+                child: SvgPicture.asset(
+                  AppAssets.moonStar,
+                  width: 64,
+                  height: 64,
+                  colorFilter: ColorFilter.mode(
+                    AppColors.cream.withValues(alpha: 0.9),
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SizedBox(
+                  height: 40,
+                  child: SvgPicture.asset(
+                    AppAssets.decoWaves,
+                    fit: BoxFit.fitWidth,
+                    alignment: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 12,
+                left: 12,
+                child: _Pill(
+                  icon: Icons.graphic_eq,
+                  label: story.tuningNote,
+                  color: AppColors.seafoam,
+                ),
+              ),
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.overlayDark,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  ),
+                  child: Text(
+                    story.coordinates,
+                    style: AppTextStyles.caption.copyWith(color: AppColors.cream),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 12,
+                right: 12,
+                child: _Pill(
+                  icon: Icons.waves,
+                  label: story.swellNote,
+                  color: AppColors.cream,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Track details + vibe chips
+// ---------------------------------------------------------------------------
+
+class _TrackDetails extends StatelessWidget {
+  const _TrackDetails({
+    required this.story,
+    required this.favourite,
+    required this.onFavourite,
+  });
+
+  final StoryData story;
+  final bool favourite;
+  final VoidCallback onFavourite;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    story.title,
+                    style: AppTextStyles.headerTitle,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${story.series} • Narrated by ${story.narrator}',
+                    style: AppTextStyles.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            IconButton(
+              onPressed: onFavourite,
+              icon: Icon(
+                favourite ? Icons.favorite : Icons.favorite_border,
+                color: favourite ? AppColors.stormRed : AppColors.muted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final vibe in story.vibeTags)
+              _VibeChip(icon: vibe.icon, label: vibe.label, color: vibe.color),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _VibeChip extends StatelessWidget {
+  const _VibeChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: AppTextStyles.caption.copyWith(color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Waveform + scrubber
+// ---------------------------------------------------------------------------
+
+class _Waveform extends StatelessWidget {
+  const _Waveform({required this.progress});
+
+  final double progress;
+
+  // Static bar heights (fraction of the 48px track).
+  static const List<double> _bars = [
+    0.3, 0.5, 0.8, 0.4, 0.7, 1.0, 0.6, 0.9, 0.5, 0.8, 1.0, 0.6, 0.4, 0.9, //
+    0.7, 0.5, 1.0, 0.8, 0.4, 0.7, 0.6, 0.9, 0.5, 0.7, 0.3, 0.6, 0.4, 0.2,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final playedCount = (_bars.length * progress).round();
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.glassFillFaint,
+        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (var i = 0; i < _bars.length; i++)
+            _Bar(
+              height: _bars[i] * 36,
+              played: i <= playedCount,
+              needle: i == playedCount,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar({
+    required this.height,
+    required this.played,
+    required this.needle,
+  });
+
+  final double height;
+  final bool played;
+  final bool needle;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = needle
+        ? AppColors.white
+        : played
+        ? AppColors.seafoam
+        : AppColors.glassBorder;
+    return Container(
+      width: needle ? 2.5 : 2,
+      height: needle ? 36 : height.clamp(3, 36),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+}
+
+class _Scrubber extends StatelessWidget {
+  const _Scrubber({
+    required this.currentTime,
+    required this.remainingTime,
+    required this.chapterProgress,
+    required this.value,
+  });
+
+  final String currentTime;
+  final String remainingTime;
+  final String chapterProgress;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 4,
+            activeTrackColor: AppColors.seafoam,
+            inactiveTrackColor: AppColors.glassBorder,
+            thumbColor: AppColors.white,
+            overlayColor: AppColors.seafoamFaint,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+          ),
+          child: Slider(value: value.clamp(0, 1), onChanged: (_) {}),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              currentTime,
+              style: AppTextStyles.caption.copyWith(color: AppColors.seafoam),
+            ),
+            Text(chapterProgress, style: AppTextStyles.caption),
+            Text(remainingTime, style: AppTextStyles.caption),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Transport controls
+// ---------------------------------------------------------------------------
+
+class _TransportControls extends StatelessWidget {
+  const _TransportControls({
+    required this.isPlaying,
+    required this.onPlayPause,
+  });
+
+  final bool isPlaying;
+  final VoidCallback onPlayPause;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _SkipButton(icon: Icons.replay_10, label: '15s', onTap: () {}),
+        const SizedBox(width: 28),
+        Material(
+          color: AppColors.seafoam,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPlayPause,
+            child: SizedBox(
+              width: 76,
+              height: 76,
+              child: Icon(
+                isPlaying ? Icons.pause : Icons.play_arrow,
+                size: 38,
+                color: AppColors.onAccent,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 28),
+        _SkipButton(icon: Icons.forward_30, label: '30s', onTap: () {}),
+      ],
+    );
+  }
+}
+
+class _SkipButton extends StatelessWidget {
+  const _SkipButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.cardSurface,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 52,
+          height: 52,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 22, color: AppColors.white),
+              Text(
+                label,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.muted,
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tuning card (speed, fadeout, ambient blend)
+// ---------------------------------------------------------------------------
+
+class _TuningCard extends StatelessWidget {
+  const _TuningCard({
+    required this.speedLabel,
+    required this.onSpeed,
+    required this.gentleFadeout,
+    required this.onFadeout,
+    required this.blend,
+    required this.onBlend,
+  });
+
+  final String speedLabel;
+  final VoidCallback onSpeed;
+  final bool gentleFadeout;
+  final ValueChanged<bool> onFadeout;
+  final double blend;
+  final ValueChanged<double> onBlend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: InkWell(
+                  onTap: onSpeed,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.glassFill,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.speed,
+                          size: 15,
+                          color: AppColors.white,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            speedLabel,
+                            style: AppTextStyles.bodyStrong,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Gentle Fadeout',
+                        style: AppTextStyles.caption,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: gentleFadeout,
+                      onChanged: onFadeout,
+                      activeThumbColor: AppColors.onAccent,
+                      activeTrackColor: AppColors.seafoam,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.grain, size: 16, color: AppColors.seafoam),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Hull Rain & Ocean Blend',
+                        style: AppTextStyles.bodyStrong,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${blend.round()}%',
+                style: AppTextStyles.bodyStrong.copyWith(
+                  color: AppColors.seafoam,
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              activeTrackColor: AppColors.seafoam,
+              inactiveTrackColor: AppColors.glassBorder,
+              thumbColor: AppColors.white,
+              overlayColor: AppColors.seafoamFaint,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+            ),
+            child: Slider(
+              value: blend,
+              max: 100,
+              onChanged: onBlend,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chapter excerpt card
+// ---------------------------------------------------------------------------
+
+class _ChapterCard extends StatelessWidget {
+  const _ChapterCard({
+    required this.story,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final StoryData story;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.glassFillFaint,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        border: Border.all(color: AppColors.glassBorderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.cardSurface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  story.chapterNumber.toString().padLeft(2, '0'),
+                  style: AppTextStyles.badge,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Chapter ${story.chapterNumber}: ${story.chapterTitle}',
+                      style: AppTextStyles.cardTitleSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Timestamp: ${story.chapterTimestamp}',
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+              ),
+              InkResponse(
+                onTap: onToggle,
+                radius: 20,
+                child: Icon(
+                  expanded ? Icons.expand_less : Icons.expand_more,
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
+          ),
+          if (expanded) ...[
+            const SizedBox(height: 12),
+            for (var i = 0; i < story.excerpt.length; i++) ...[
+              if (i > 0) const SizedBox(height: 8),
+              Text(
+                story.excerpt[i],
+                style: AppTextStyles.body.copyWith(
+                  color: i == 0 ? AppColors.cream : AppColors.bodyMist,
+                  fontStyle: i == 0 ? FontStyle.italic : FontStyle.normal,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: const [
+                _ElementBadge(icon: Icons.water_drop, label: 'Rain on Skylight'),
+                _ElementBadge(icon: Icons.sailing, label: 'Timber Creaks'),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ElementBadge extends StatelessWidget {
+  const _ElementBadge({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppColors.teal),
+          const SizedBox(width: 6),
+          Text(label, style: AppTextStyles.caption),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Footer quick-nav decks
+// ---------------------------------------------------------------------------
+
+class _FooterDecks extends StatelessWidget {
+  const _FooterDecks();
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: const [
+          Expanded(
+            child: _FooterDeck(
+              icon: Icons.graphic_eq,
+              iconColor: AppColors.sand,
+              title: 'Voice Equalizer',
+              subtitle: 'Warm Cabin Lows',
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: _FooterDeck(
+              icon: Icons.air,
+              iconColor: AppColors.seafoam,
+              title: 'Respiration Cue',
+              subtitle: '4s Tide In • 6s Tide Out',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FooterDeck extends StatelessWidget {
+  const _FooterDeck({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.glassFill,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 20, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTextStyles.bodyStrong,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: AppTextStyles.caption,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

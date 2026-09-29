@@ -1,0 +1,329 @@
+<!DOCTYPE html><html class="dark" lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><title>Helm / Haven</title><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@100..900&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#00132e;overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "tertiary-fixed-dim": "#ffb95f", "surface-container-highest": "#233552", "on-primary-fixed-variant": "#005047", "on-secondary-fixed-variant": "#264191", "on-tertiary-fixed-variant": "#653e00", "on-surface": "#d6e3ff", "on-tertiary-container": "#6d4400", "surface-container": "#0b203c", "error": "#ffb4ab", "outline-variant": "#3c4a46", "secondary": "#b6c4ff", "on-background": "#d6e3ff", "surface-tint": "#3cddc7", "surface-dim": "#00132e", "on-primary-fixed": "#00201c", "primary-fixed-dim": "#3cddc7", "on-tertiary": "#472a00", "on-tertiary-fixed": "#2a1700", "primary-container": "#2dd4bf", "secondary-fixed": "#dce1ff", "inverse-primary": "#006b5f", "outline": "#859490", "background": "#00132e", "surface-container-low": "#061c37", "secondary-container": "#264191", "on-secondary-fixed": "#00164e", "tertiary": "#ffd29f", "on-error-container": "#ffdad6", "primary-fixed": "#62fae3", "on-secondary": "#05297a", "surface": "#00132e", "on-error": "#690005", "on-primary-container": "#00574d", "inverse-on-surface": "#1e314e", "tertiary-container": "#ffad3a", "error-container": "#93000a", "surface-bright": "#273a57", "surface-container-high": "#172a47", "on-primary": "#003731", "secondary-fixed-dim": "#b6c4ff", "tertiary-fixed": "#ffddb8", "surface-container-lowest": "#000e25", "primary": "#57f1db", "on-secondary-container": "#9db2ff", "surface-variant": "#233552", "on-surface-variant": "#bacac5", "inverse-surface": "#d6e3ff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter": "1rem", "margin": "1.5rem", "space-xl": "2rem", "space-sm": "0.5rem", "gutter-mobile": "0.75rem", "space-md": "1rem", "margin-mobile": "1.25rem", "space-xs": "0.25rem", "space-lg": "1.5rem" }, "fontFamily": { "display-lg": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "label-md": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "label-lg": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"] }, "fontSize": { "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}], "headline-lg-mobile": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "headline-sm": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "600"}], "label-md": ["11px", {"lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "700"}], "label-sm": ["10px", {"lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "600"}], "body-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400"}], "headline-lg": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.015em", "fontWeight": "700"}], "label-lg": ["13px", {"lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "700"}], "body-lg": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400"}], "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}], "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}] } } } }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface flex flex-col min-h-screen selection:bg-primary-container selection:text-on-primary-container"><div class="w-full max-w-[430px] mx-auto min-h-screen flex flex-col relative bg-surface"><header class="fixed top-0 w-full max-w-[430px] z-50 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_4px_20px_rgba(0,19,46,0.5)]"><div class="w-full px-space-md pt-space-xs flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm tracking-wider"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[14px] text-primary">explore</span><span class="font-label-md text-label-md text-on-surface font-bold">21:40</span><span class="text-[9px] text-outline font-label-sm tracking-normal">UTC+2</span></div><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[14px] text-tertiary">satellite_alt</span><span class="material-symbols-outlined text-[14px]">wifi</span><span class="material-symbols-outlined text-[14px] text-primary">battery_charging_80</span></div></div><div class="h-14 px-space-margin-mobile flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Go back" class="w-11 h-11 -ml-2 flex items-center justify-center rounded-full text-on-surface hover:text-primary active:scale-95 transition-all" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm tracking-tight text-on-surface truncate">Story Playback Session</h1></div><div class="flex items-center gap-space-sm"><button aria-label="More actions" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-all"><span class="material-symbols-outlined text-[20px]">tune</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col w-full px-space-margin-mobile pt-20 pb-28 bg-surface"><div class="flex flex-col w-full pb-10 space-y-space-md">
+<!-- Top Context & Sleep Utilities Bar -->
+<div class="flex items-center justify-between w-full">
+<div class="inline-flex items-center gap-space-xs px-2.5 py-1 rounded-full bg-surface-container-high/80 backdrop-blur-md">
+<span class="material-symbols-outlined text-[13px] text-primary" style="font-variation-settings: 'FILL' 1;">cloud_done</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold tracking-wider uppercase">Offline Cached</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-highest/90 text-on-surface hover:text-primary active:scale-95 transition-all shadow-sm" id="timer-toggle-btn">
+<span class="material-symbols-outlined text-[15px] text-tertiary" style="font-variation-settings: 'FILL' 1;">bedtime</span>
+<span class="font-label-md text-label-md text-tertiary" id="timer-display">30m Sleep Timer</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">bookmark</span>
+</button>
+</div>
+</div>
+<!-- Atmospheric Cover Art Deck -->
+<div class="relative w-full aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl bg-surface-container-lowest">
+<img class="w-full h-full object-cover select-none" data-alt="Rich painted nocturnal maritime illustration of Cape Horn lighthouse perched atop rugged sheer sea cliffs against a midnight cyan and deep navy storm sky. The solitary stone beacon casts a sweeping warm golden amber fog-beam across dark churning ocean swells with bioluminescent seafoam fringes, sprinkled with luminous cold stars and ethereal mist." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDC8omhonm1h0t2BNOrCc0roV6EhrCNufjyWuF0_lwUa1zqoqhXGN1s0f0XqBIoPp5P5CVKMSIftatr_9JpFYLCbHFkXp6D6Pf_cO7vDj30OcuFZE0jHiZPm7pvHswD9g1LyhDKNk-KlxDBKBlFBqq0mee8sV8otNevV91gmfF6lOwnf9LQ1rvFusCiHrp0Poz9nckJN9npKTLKtjbFogd2IZMUu-ZLBSFtYFi3iyVdKMaV7So_uA23qQ">
+<!-- Atmospheric Nautical Scrim -->
+<div class="absolute inset-0 bg-gradient-to-t from-surface-dim via-surface-dim/40 to-transparent pointer-events-none"></div>
+<div class="absolute inset-0 bg-radial-at-c from-transparent via-transparent to-surface-dim/70 pointer-events-none"></div>
+<!-- Active Atmospheric Floating Chip -->
+<div class="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-dim/75 backdrop-blur-md">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="font-label-sm text-label-sm text-primary tracking-wide">432Hz Tuning Active</span>
+</div>
+<!-- Live Ambient Nautical Coordinates -->
+<div class="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-surface-dim/70 backdrop-blur-md text-on-surface-variant font-label-sm text-label-sm">
+      55°58′S • 67°17′W
+    </div>
+<!-- Micro Soundscape Floating Pill on Art -->
+<div class="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-highest/90 backdrop-blur-lg shadow-lg">
+<span class="material-symbols-outlined text-[14px] text-primary animate-pulse">waves</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">Cape Horn Swell 2.4m</span>
+</div>
+</div>
+<!-- Track Details & Mood Badges -->
+<div class="flex flex-col w-full space-y-space-xs">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col min-w-0">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface tracking-tight truncate">
+          The Lighthouse at Cape Horn
+        </h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5 truncate">
+          Tales of the Roaring Forties • Narrated by Capt. Torben Lind
+        </p>
+</div>
+<button class="w-10 h-10 -mr-1 flex-shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[22px]">favorite_border</span>
+</button>
+</div>
+<!-- Story Vibe Tags -->
+<div class="flex flex-wrap items-center gap-1.5 pt-1">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">nightlight_round</span>
+        Deep Sleep
+      </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-tertiary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[13px]">mic</span>
+        Warm Baritone
+      </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-secondary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[13px]">headphones</span>
+        Binaural Ocean Waves
+      </span>
+</div>
+</div>
+<!-- Audio Waveform Visualizer & Scrubber -->
+<div class="flex flex-col w-full space-y-2 pt-1">
+<!-- Dynamic Sea-Wave Frequency Bars -->
+<div class="relative w-full h-12 flex items-end justify-between gap-[3px] px-1 py-1 rounded-2xl bg-surface-container-low/70 overflow-hidden">
+<!-- Glow ambient backdrop -->
+<div class="absolute inset-0 bg-gradient-to-r from-primary/10 via-primary-container/15 to-transparent pointer-events-none"></div>
+<!-- Left Active Waveform Bars (Played: 40%) -->
+<div class="w-1 h-3 rounded-full bg-primary/70"></div>
+<div class="w-1 h-5 rounded-full bg-primary"></div>
+<div class="w-1 h-8 rounded-full bg-primary"></div>
+<div class="w-1 h-4 rounded-full bg-primary/80"></div>
+<div class="w-1 h-7 rounded-full bg-primary"></div>
+<div class="w-1 h-10 rounded-full bg-primary shadow-[0_0_8px_rgba(87,241,219,0.5)]"></div>
+<div class="w-1 h-6 rounded-full bg-primary"></div>
+<div class="w-1 h-9 rounded-full bg-primary"></div>
+<div class="w-1 h-5 rounded-full bg-primary/80"></div>
+<div class="w-1 h-8 rounded-full bg-primary"></div>
+<div class="w-1 h-11 rounded-full bg-primary shadow-[0_0_10px_rgba(87,241,219,0.6)]"></div>
+<div class="w-1 h-6 rounded-full bg-primary"></div>
+<div class="w-1 h-4 rounded-full bg-primary/90"></div>
+<div class="w-1 h-9 rounded-full bg-primary"></div>
+<!-- Current Needle Bar -->
+<div class="w-1.5 h-11 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.9)] animate-pulse"></div>
+<!-- Right Unplayed Waveform Bars (Pending: 60%) -->
+<div class="w-1 h-7 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-5 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-10 rounded-full bg-surface-variant"></div>
+<div class="w-1 h-8 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-4 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-7 rounded-full bg-surface-variant"></div>
+<div class="w-1 h-6 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-9 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-5 rounded-full bg-surface-variant"></div>
+<div class="w-1 h-7 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-3 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-6 rounded-full bg-surface-variant"></div>
+<div class="w-1 h-4 rounded-full bg-surface-container-highest"></div>
+<div class="w-1 h-2 rounded-full bg-surface-container-highest"></div>
+</div>
+<!-- Scrubber Slider -->
+<div class="relative w-full flex items-center group py-1">
+<input class="w-full h-1.5 bg-surface-container-highest rounded-full appearance-none cursor-pointer accent-primary focus:outline-none" id="playback-range" max="1320" min="0" type="range" value="522">
+</div>
+<!-- Timestamps -->
+<div class="flex items-center justify-between text-on-surface-variant font-label-md text-label-md tracking-wider">
+<span class="text-primary font-bold" id="current-time-label">08:42</span>
+<span class="text-outline font-normal">Chapter 2 of 4</span>
+<span id="remaining-time-label" class="">-13:18</span>
+</div>
+</div>
+<!-- Primary Audio Controls -->
+<div class="flex items-center justify-center gap-space-lg py-2">
+<!-- Rewind 15s -->
+<button class="w-12 h-12 rounded-full bg-surface-container flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all shadow-md" id="rw-btn">
+<span class="material-symbols-outlined text-[24px]">replay_10</span>
+<span class="text-[9px] -mt-1 font-bold">15s</span>
+</button>
+<!-- Main Play/Pause Button -->
+<button class="relative w-20 h-20 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shadow-[0_12px_32px_-4px_rgba(45,212,191,0.45)] hover:scale-105 active:scale-95 transition-all" id="master-play-btn">
+<div class="absolute -inset-1 rounded-full bg-primary/25 blur-md animate-pulse"></div>
+<span class="material-symbols-outlined text-[38px] relative z-10" id="master-play-icon" style="font-variation-settings: 'FILL' 1;">pause</span>
+</button>
+<!-- Fast Forward 30s -->
+<button class="w-12 h-12 rounded-full bg-surface-container flex flex-col items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-all shadow-md" id="ff-btn">
+<span class="material-symbols-outlined text-[24px]">forward_30</span>
+<span class="text-[9px] -mt-1 font-bold">30s</span>
+</button>
+</div>
+<!-- Secondary Nautical Tuning Controls -->
+<div class="p-space-md rounded-2xl bg-surface-container/90 backdrop-blur-md space-y-space-md shadow-md">
+<!-- Speed & Auto Fade Utilities -->
+<div class="flex items-center justify-between">
+<!-- Playback Speed -->
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-highest text-on-surface hover:text-primary transition-all" id="speed-chip">
+<span class="material-symbols-outlined text-[15px]">speed</span>
+<span class="font-label-md text-label-md font-bold" id="speed-label">1.0x Pace</span>
+</button>
+<!-- Sleep Fadeout Mode -->
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Gentle Fadeout</span>
+<button class="w-10 h-6 rounded-full bg-primary p-0.5 transition-colors focus:outline-none" id="fadeout-toggle">
+<div class="w-5 h-5 rounded-full bg-on-primary shadow-sm transform translate-x-4 transition-transform" id="fadeout-knob"></div>
+</button>
+</div>
+</div>
+<!-- Ambient Soundscape Mixer -->
+<div class="space-y-2 pt-1">
+<div class="flex items-center justify-between text-on-surface-variant">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-primary">rainy</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Hull Rain &amp; Ocean Blend</span>
+</div>
+<span class="font-label-md text-label-md text-primary font-bold" id="blend-pct-label">45%</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[14px] text-outline">volume_mute</span>
+<input class="w-full h-1.5 bg-surface-container-highest rounded-full appearance-none cursor-pointer accent-primary focus:outline-none" id="soundscape-blend" max="100" min="0" type="range" value="45">
+<span class="material-symbols-outlined text-[14px] text-outline">air</span>
+</div>
+</div>
+</div>
+<!-- Story Synopsis & Narration Chapter Drawer -->
+<div class="w-full rounded-2xl bg-surface-container-low p-space-md space-y-space-sm shadow-md">
+<!-- Chapter Header / Dropdown Toggle -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="w-7 h-7 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary font-label-md text-label-md font-bold">
+          02
+        </span>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">
+            Chapter 2: The Keeper's Lantern
+          </h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant">
+            Timestamp: 08:42 — 22:00
+          </p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary transition-all" id="lore-expand-btn">
+<span class="material-symbols-outlined text-[20px]" id="lore-expand-icon">expand_more</span>
+</button>
+</div>
+<!-- Lore Excerpt (Collapsible Container) -->
+<div class="pt-1 text-on-surface-variant font-body-sm text-body-sm leading-relaxed space-y-2" id="lore-body">
+<p class="italic text-on-surface">
+        “The wick catches with a soft crackle, shielded from forty knots of Antarctic gale by two inches of frosted Belgian plate glass. Below, the dark Drake Passage rolls on in ceaseless, rhythmic breathing...”
+      </p>
+<p class="">
+        Listen closely as Captain Torben details the ancient clockwork counterweights that kept the prism rotating without shore power for one hundred and twelve solitary winters. Let the steady pendulum swing settle your pulse.
+      </p>
+</div>
+<!-- Soundscape Elements Badges -->
+<div class="flex items-center gap-2 pt-2">
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest text-outline font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[11px] text-tertiary">water_drop</span> Rain on Skylight
+      </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest text-outline font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[11px] text-primary">sailing</span> Timber Creaks
+      </span>
+</div>
+</div>
+<!-- Bottom Quick Navigation Decks -->
+<div class="grid grid-cols-2 gap-space-sm pt-1">
+<div class="p-3 rounded-2xl bg-surface-container flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-tertiary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">graphic_eq</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-md text-label-md text-on-surface font-bold truncate">Voice Equalizer</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant truncate">Warm Cabin Lows</p>
+</div>
+</div>
+<div class="p-3 rounded-2xl bg-surface-container flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">air</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-md text-label-md text-on-surface font-bold truncate">Respiration Cue</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant truncate">4s Tide In • 6s Tide Out</p>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Simple Micro-Interactions for Story Playback Experience
+  const playBtn = document.getElementById('master-play-btn');
+  const playIcon = document.getElementById('master-play-icon');
+  let isPlaying = true;
+
+  playBtn.addEventListener('click', () => {
+    isPlaying = !isPlaying;
+    playIcon.textContent = isPlaying ? 'pause' : 'play_arrow';
+    playBtn.classList.toggle('shadow-[0_12px_32px_-4px_rgba(45,212,191,0.45)]', isPlaying);
+  });
+
+  // Expand / Collapse Chapter Transcript
+  const loreToggle = document.getElementById('lore-expand-btn');
+  const loreBody = document.getElementById('lore-body');
+  const loreIcon = document.getElementById('lore-expand-icon');
+  let isExpanded = true;
+
+  loreToggle.addEventListener('click', () => {
+    isExpanded = !isExpanded;
+    loreBody.classList.toggle('hidden', !isExpanded);
+    loreIcon.textContent = isExpanded ? 'expand_more' : 'expand_less';
+  });
+
+  // Soundscape Blend Slider Reactive Output
+  const blendSlider = document.getElementById('soundscape-blend');
+  const blendLabel = document.getElementById('blend-pct-label');
+  blendSlider.addEventListener('input', (e) => {
+    blendLabel.textContent = `${e.target.value}%`;
+  });
+
+  // Playback Range Scrubber
+  const playbackRange = document.getElementById('playback-range');
+  const curTimeLabel = document.getElementById('current-time-label');
+  const remTimeLabel = document.getElementById('remaining-time-label');
+  const totalSeconds = 1320; // 22 minutes
+
+  playbackRange.addEventListener('input', (e) => {
+    const curVal = parseInt(e.target.value, 10);
+    const remVal = totalSeconds - curVal;
+
+    const curMins = Math.floor(curVal / 60).toString().padStart(2, '0');
+    const curSecs = (curVal % 60).toString().padStart(2, '0');
+    const remMins = Math.floor(remVal / 60).toString().padStart(2, '0');
+    const remSecs = (remVal % 60).toString().padStart(2, '0');
+
+    curTimeLabel.textContent = `${curMins}:${curSecs}`;
+    remTimeLabel.textContent = `-${remMins}:${remSecs}`;
+  });
+
+  // Speed Cycling
+  const speedBtn = document.getElementById('speed-chip');
+  const speedLabel = document.getElementById('speed-label');
+  const speeds = ['0.8x Pace', '1.0x Pace', '1.2x Pace'];
+  let currentSpeedIdx = 1;
+
+  speedBtn.addEventListener('click', () => {
+    currentSpeedIdx = (currentSpeedIdx + 1) % speeds.length;
+    speedLabel.textContent = speeds[currentSpeedIdx];
+  });
+
+  // Fadeout Toggle
+  const fadeToggle = document.getElementById('fadeout-toggle');
+  const fadeKnob = document.getElementById('fadeout-knob');
+  let fadeActive = true;
+
+  fadeToggle.addEventListener('click', () => {
+    fadeActive = !fadeActive;
+    if (fadeActive) {
+      fadeToggle.classList.remove('bg-surface-container-highest');
+      fadeToggle.classList.add('bg-primary');
+      fadeKnob.classList.add('translate-x-4');
+    } else {
+      fadeToggle.classList.add('bg-surface-container-highest');
+      fadeToggle.classList.remove('bg-primary');
+      fadeKnob.classList.remove('translate-x-4');
+    }
+  });
+
+  // Sleep Timer Micro-Cycle
+  const timerBtn = document.getElementById('timer-toggle-btn');
+  const timerDisplay = document.getElementById('timer-display');
+  const timerSettings = ['15m Sleep Timer', '30m Sleep Timer', '45m Sleep Timer', 'Off'];
+  let timerIdx = 1;
+
+  timerBtn.addEventListener('click', () => {
+    timerIdx = (timerIdx + 1) % timerSettings.length;
+    timerDisplay.textContent = timerSettings[timerIdx];
+  });
+</script></main><nav class="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto z-50 bg-[#061528] border-t border-slate-800/80 px-4 pt-2.5 pb-6 shadow-2xl"><div class="flex items-center justify-around"><button class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">sailing</span><span class="text-[11px] font-semibold tracking-wide">Helm</span></button><button class="flex flex-col items-center gap-0.5 text-primary relative"><div class="w-10 h-10 -mt-1 rounded-full bg-primary/15 flex items-center justify-center text-primary shadow-[0_0_12px_rgba(87,241,219,0.35)]"><span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">waves</span></div><span class="text-[11px] font-bold text-primary tracking-wide">Haven</span><span class="w-1.5 h-1.5 rounded-full bg-primary mt-0.5"></span></button><button class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">edit_note</span><span class="text-[11px] font-semibold tracking-wide">Log</span></button><button class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">groups</span><span class="text-[11px] font-semibold tracking-wide">Crew</span></button><button class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">trending_up</span><span class="text-[11px] font-semibold tracking-wide">Insights</span></button></div><div class="w-32 h-1 bg-slate-600/70 rounded-full mx-auto mt-2"></div></nav></div>
+
+</body></html>

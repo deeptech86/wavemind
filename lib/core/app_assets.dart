@@ -1,0 +1,49 @@
+/// Central registry of bundled asset paths (exported from the Figma design).
+///
+/// Keeping paths here avoids magic strings scattered across widgets.
+abstract final class AppAssets {
+  static const String _icons = 'assets/icons';
+  static const String _images = 'assets/images';
+
+  // Icons (Lucide-style line icons exported as SVG, colors baked to design).
+  static const String anchorWordmark = '$_icons/anchor_wordmark.svg';
+  static const String anchor = '$_icons/anchor.svg';
+  static const String compass = '$_icons/compass.svg';
+  static const String waves = '$_icons/waves.svg';
+  static const String wavesNav = '$_icons/waves_nav.svg';
+  static const String bookOpenText = '$_icons/book_open_text.svg';
+  static const String circleX = '$_icons/circle_x.svg';
+  static const String sailboat = '$_icons/sailboat.svg';
+  static const String pen = '$_icons/pen.svg';
+  static const String users = '$_icons/users.svg';
+  static const String chartLine = '$_icons/chart_line.svg';
+  static const String decoWaves = '$_icons/deco_waves.svg';
+
+  // Feature-screen icons (added for the seven inner screens).
+  static const String arrowLeft = '$_icons/arrow_left.svg';
+  static const String cloudRainWind = '$_icons/cloud_rain_wind.svg';
+  static const String cloudFog = '$_icons/cloud_fog.svg';
+  static const String moonStar = '$_icons/moon_star.svg';
+  static const String wind = '$_icons/wind.svg';
+  static const String mail = '$_icons/mail.svg';
+  static const String volumeOff = '$_icons/volume_off.svg';
+  static const String pause = '$_icons/pause.svg';
+  static const String helpCircle = '$_icons/help_circle.svg';
+  static const String mapPin = '$_icons/map_pin.svg';
+  static const String lightbulbOff = '$_icons/lightbulb_off.svg';
+  static const String lock = '$_icons/lock.svg';
+  static const String mic = '$_icons/mic.svg';
+  static const String camera = '$_icons/camera.svg';
+  static const String info = '$_icons/info.svg';
+  static const String clock = '$_icons/clock.svg';
+  static const String shell = '$_icons/shell.svg';
+  static const String sparkles = '$_icons/sparkles.svg';
+  static const String refreshCw = '$_icons/refresh_cw.svg';
+  static const String smilePlus = '$_icons/smile_plus.svg';
+  static const String send = '$_icons/send.svg';
+  static const String insightsChart = '$_icons/insights_chart.svg';
+
+  // Raster imagery.
+  static const String onboardingSailboat = '$_images/onboarding_sailboat.png';
+  static const String avatar = '$_images/avatar.png';
+}

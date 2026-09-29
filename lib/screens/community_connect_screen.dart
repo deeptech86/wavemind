@@ -1,0 +1,1049 @@
+import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_typography.dart';
+import '../widgets/tide_bottom_nav.dart';
+import 'anonymous_chat_screen.dart';
+
+/// "Crew" screen (Stitch "crew_fleet_leaderboard" redesign).
+///
+/// A two-part destination behind a segmented control:
+///   * **Anchor Pool** — the original community content (anonymized crew swell,
+///     cast-a-float-bottle, gratitude notes), unchanged, still linking to the
+///     anonymous chat.
+///   * **Fleet Spirit** — a new voyage-milestone / contribution / leaderboard
+///     view ranked by "knots". Static data for Stage 1.
+///
+/// Anchor Pool is the default so the existing wired flow stays front-and-centre.
+class CommunityConnectScreen extends StatefulWidget {
+  const CommunityConnectScreen({super.key});
+
+  @override
+  State<CommunityConnectScreen> createState() => _CommunityConnectScreenState();
+}
+
+enum _CrewTab { anchorPool, fleetSpirit }
+
+class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
+  _CrewTab _tab = _CrewTab.anchorPool;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      bottomNavigationBar: const TideBottomNav(active: TideTab.crew),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: AppColors.appBackgroundGradient,
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text('Crew', style: AppTextStyles.headerTitle),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SegmentedControl(
+                        active: _tab,
+                        onChanged: (t) => setState(() => _tab = t),
+                      ),
+                      const SizedBox(height: 20),
+                      if (_tab == _CrewTab.anchorPool)
+                        _AnchorPoolView(
+                          onCast: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const AnonymousChatScreen(),
+                            ),
+                          ),
+                        )
+                      else
+                        const _FleetSpiritView(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Segmented control
+// ---------------------------------------------------------------------------
+
+class _SegmentedControl extends StatelessWidget {
+  const _SegmentedControl({required this.active, required this.onChanged});
+
+  final _CrewTab active;
+  final ValueChanged<_CrewTab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.glassFillFaint,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        border: Border.all(color: AppColors.glassBorderSoft),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _SegmentButton(
+              icon: Icons.waves,
+              label: 'Anchor Pool',
+              selected: active == _CrewTab.anchorPool,
+              onTap: () => onChanged(_CrewTab.anchorPool),
+            ),
+          ),
+          Expanded(
+            child: _SegmentButton(
+              icon: Icons.military_tech,
+              label: 'Fleet Spirit',
+              selected: active == _CrewTab.fleetSpirit,
+              onTap: () => onChanged(_CrewTab.fleetSpirit),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SegmentButton extends StatelessWidget {
+  const _SegmentButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.seafoam : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? AppColors.onAccent : AppColors.muted,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: AppTextStyles.bodyStrong.copyWith(
+                    color: selected ? AppColors.onAccent : AppColors.muted,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// Anchor Pool view (existing content, preserved)
+// ===========================================================================
+
+class _AnchorPoolView extends StatelessWidget {
+  const _AnchorPoolView({required this.onCast});
+
+  final VoidCallback onCast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _CrewMoodDashboard(),
+        const SizedBox(height: 20),
+        _EncourageBox(onCast: onCast),
+        const SizedBox(height: 20),
+        const _GratitudeWall(),
+      ],
+    );
+  }
+}
+
+class _CrewMoodDashboard extends StatelessWidget {
+  const _CrewMoodDashboard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Anonymized Crew Swell',
+                  style: AppTextStyles.titleMedium,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.seafoamFaint,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('STEADY VIBE', style: AppTextStyles.badge),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.glassFillFaint,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.teal, width: 4),
+                ),
+                child: Text('82%', style: AppTextStyles.headerTitle),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Calm or Steady Winds',
+                      style: AppTextStyles.bodyStrong.copyWith(
+                        color: AppColors.cream,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Aggregated state across all 18 watch members currently '
+                      'logged on.',
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EncourageBox extends StatelessWidget {
+  const _EncourageBox({required this.onCast});
+
+  final VoidCallback onCast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.teal,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            offset: Offset(0, 10),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cast a Float Bottle (Encouragement)',
+            style: AppTextStyles.cardTitleSmall,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.overlayDark,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Type a silent supportive message to be cast anonymously into the '
+              'mess deck display...',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.tealTint,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onCast,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                alignment: Alignment.center,
+                child: Text(
+                  'Cast to Fleet',
+                  style: AppTextStyles.buttonSmall.copyWith(
+                    color: AppColors.teal,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GratitudeWall extends StatelessWidget {
+  const _GratitudeWall();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'RIGGING GRATITUDE NOTES',
+          style: AppTextStyles.titleMedium.copyWith(color: AppColors.cream),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: const [
+              _GratitudeNote(
+                text:
+                    "“Grateful for the chef's fresh sourdough this morning. "
+                    'Little things make the watch better.”',
+                author: 'Anonymous Deckhand',
+              ),
+              SizedBox(width: 10),
+              _GratitudeNote(
+                text:
+                    '“Clean water line finally fixed. Good hot shower was '
+                    'legendary.”',
+                author: 'Anonymous Engineer',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GratitudeNote extends StatelessWidget {
+  const _GratitudeNote({required this.text, required this.author});
+
+  final String text;
+  final String author;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 260,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.glassFill),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.white,
+                height: 1.4,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            author,
+            style: AppTextStyles.badge.copyWith(fontWeight: FontWeight.w400),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// Fleet Spirit view (new — static Stage 1 data)
+// ===========================================================================
+
+class _FleetSpiritView extends StatelessWidget {
+  const _FleetSpiritView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        _VoyageMilestoneCard(),
+        SizedBox(height: 20),
+        _ContributionCard(),
+        SizedBox(height: 24),
+        _LeaderboardSection(),
+        SizedBox(height: 20),
+        _KnotsInfoDeck(),
+      ],
+    );
+  }
+}
+
+class _VoyageMilestoneCard extends StatelessWidget {
+  const _VoyageMilestoneCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('VOYAGE MILESTONE', style: AppTextStyles.badge),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Yokohama to Valparaiso',
+                      style: AppTextStyles.titleMedium,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.glassFill,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.flag_outlined,
+                      size: 14,
+                      color: AppColors.sand,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Leg 2',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.sand,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Watch Solidarity Target: Maintain calm wake across collective '
+            'shifts.',
+            style: AppTextStyles.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Port Watch',
+                  style: AppTextStyles.caption,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Flexible(
+                child: Text(
+                  '84% Swell Harmony',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.seafoam,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Flexible(
+                child: Text(
+                  'Starboard',
+                  textAlign: TextAlign.end,
+                  style: AppTextStyles.caption,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            child: LinearProgressIndicator(
+              value: 0.84,
+              minHeight: 8,
+              backgroundColor: AppColors.deepNavy,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.seafoam),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Day 42 at Sea',
+                  style: AppTextStyles.caption,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Flexible(
+                child: Text(
+                  '6,420 NM Traveled',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.caption.copyWith(color: AppColors.cream),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Flexible(
+                child: Text(
+                  '1,280 NM to go',
+                  textAlign: TextAlign.end,
+                  style: AppTextStyles.caption,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContributionCard extends StatelessWidget {
+  const _ContributionCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.cardSurface, AppColors.navyBlue],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _InitialsAvatar(
+                initials: 'MT',
+                color: AppColors.teal,
+                rank: '#3',
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('YOUR CONTRIBUTION', style: AppTextStyles.badge),
+                    const SizedBox(height: 2),
+                    Text(
+                      '1st Mate Marcus Thorne',
+                      style: AppTextStyles.cardTitleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text('MV Pacific Osprey', style: AppTextStyles.caption),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '720',
+                    style: AppTextStyles.headerTitle.copyWith(
+                      color: AppColors.seafoam,
+                    ),
+                  ),
+                  Text('FLEET KNOTS', style: AppTextStyles.caption),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: const [
+              _KnotBadge(
+                icon: Icons.verified_outlined,
+                label: 'Steady Helm (7d Streak)',
+                color: AppColors.seafoam,
+              ),
+              _KnotBadge(
+                icon: Icons.volunteer_activism_outlined,
+                label: '12 Gratitude Bottles Cast',
+                color: AppColors.sand,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KnotBadge extends StatelessWidget {
+  const _KnotBadge({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.glassFill,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: AppTextStyles.caption.copyWith(color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeaderboardSection extends StatelessWidget {
+  const _LeaderboardSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Fleet Solidarity Log',
+                    style: AppTextStyles.titleMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Celebrating restorative actions & crew presence',
+                    style: AppTextStyles.caption,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: AppColors.glassFillFaint,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardSurface,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Voyage',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.seafoam,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text('7 Days', style: AppTextStyles.caption),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const _LeaderRow(
+          rank: 1,
+          initials: 'LS',
+          color: AppColors.seafoam,
+          name: 'Bosun Liam S.',
+          note: '14-day steady swell streak',
+          knots: '850',
+          tag: 'Fleet Beacon',
+        ),
+        const SizedBox(height: 10),
+        const _LeaderRow(
+          rank: 2,
+          initials: 'DK',
+          color: AppColors.sand,
+          name: 'Chief Eng. Dave K.',
+          note: '9 sound-down cabin rests logged',
+          knots: '780',
+        ),
+        const SizedBox(height: 10),
+        const _LeaderRow(
+          rank: 3,
+          initials: 'MT',
+          color: AppColors.teal,
+          name: 'Marcus Thorne (You)',
+          note: '12 Gratitude Bottles Cast',
+          knots: '720',
+          highlighted: true,
+        ),
+        const SizedBox(height: 10),
+        const _LeaderRow(
+          rank: 4,
+          initials: 'ER',
+          color: AppColors.teal,
+          name: 'Deckhand Elena R.',
+          note: '10 tidal breath resets',
+          knots: '650',
+        ),
+        const SizedBox(height: 10),
+        const _LeaderRow(
+          rank: 5,
+          initials: 'AM',
+          color: AppColors.sand,
+          name: 'Cadet Aris M.',
+          note: 'First Voyage Star • 6 logs true',
+          knots: '590',
+        ),
+      ],
+    );
+  }
+}
+
+class _LeaderRow extends StatelessWidget {
+  const _LeaderRow({
+    required this.rank,
+    required this.initials,
+    required this.color,
+    required this.name,
+    required this.note,
+    required this.knots,
+    this.tag,
+    this.highlighted = false,
+  });
+
+  final int rank;
+  final String initials;
+  final Color color;
+  final String name;
+  final String note;
+  final String knots;
+  final String? tag;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: highlighted ? AppColors.seafoamFaint : AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+        border: highlighted
+            ? Border.all(color: AppColors.seafoamBorder)
+            : null,
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 24,
+            child: rank == 1
+                ? const Icon(
+                    Icons.workspace_premium,
+                    size: 22,
+                    color: AppColors.sand,
+                  )
+                : Text(
+                    '$rank',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.statValue.copyWith(
+                      color: highlighted ? AppColors.seafoam : AppColors.muted,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 10),
+          _InitialsAvatar(initials: initials, color: color, size: 40),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: AppTextStyles.bodyStrong.copyWith(
+                          color: highlighted ? AppColors.seafoam : null,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (tag != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.seafoamFaint,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          tag!,
+                          style: AppTextStyles.badge.copyWith(fontSize: 9),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  note,
+                  style: AppTextStyles.caption,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                knots,
+                style: AppTextStyles.statValue.copyWith(
+                  color: highlighted ? AppColors.seafoam : AppColors.white,
+                ),
+              ),
+              Text('knots', style: AppTextStyles.caption),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InitialsAvatar extends StatelessWidget {
+  const _InitialsAvatar({
+    required this.initials,
+    required this.color,
+    this.size = 48,
+    this.rank,
+  });
+
+  final String initials;
+  final Color color;
+  final double size;
+  final String? rank;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.25),
+              border: Border.all(color: color, width: 1.5),
+            ),
+            child: Text(
+              initials,
+              style: AppTextStyles.bodyStrong.copyWith(color: color),
+            ),
+          ),
+          if (rank != null)
+            Positioned(
+              bottom: -2,
+              right: -2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.seafoam,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  border: Border.all(color: AppColors.deepNavy, width: 1.5),
+                ),
+                child: Text(
+                  rank!,
+                  style: AppTextStyles.badge.copyWith(
+                    color: AppColors.onAccent,
+                    fontSize: 9,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KnotsInfoDeck extends StatelessWidget {
+  const _KnotsInfoDeck();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.glassFillFaint,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        border: Border.all(color: AppColors.glassBorderSoft),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.seafoamFaint,
+              borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+            ),
+            child: const Icon(
+              Icons.explore_outlined,
+              size: 22,
+              color: AppColors.seafoam,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'How Fleet Knots are Earned',
+                  style: AppTextStyles.cardTitleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Knots measure supportive presence, not competition. Gain '
+                  'knots by checking your daily swell (+30), casting float '
+                  'bottles (+40), and completing shift-change breath routines '
+                  '(+50).',
+                  style: AppTextStyles.caption.copyWith(height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
