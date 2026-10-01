@@ -4,6 +4,7 @@
 abstract final class AppAssets {
   static const String _icons = 'assets/icons';
   static const String _images = 'assets/images';
+  static const String _audio = 'assets/audio';
 
   // Icons (Lucide-style line icons exported as SVG, colors baked to design).
   static const String anchorWordmark = '$_icons/anchor_wordmark.svg';
@@ -46,4 +47,21 @@ abstract final class AppAssets {
   // Raster imagery.
   static const String onboardingSailboat = '$_images/onboarding_sailboat.png';
   static const String avatar = '$_images/avatar.png';
+
+  // --- Audio (Stage 2) ------------------------------------------------------
+  // Placeholder royalty-free beds synthesized locally (pure-Python `wave`),
+  // plus macOS `say`-generated narration. All to be swapped for real narration
+  // / sound design later. See assets/audio/ and scratchpad/synth_audio.py.
+
+  /// Seamlessly-looping ambient beds (mono 22.05 kHz WAV).
+  static const String audioRollingDeepSea = '$_audio/rolling_deep_sea.wav';
+  static const String audioSteelHullRain = '$_audio/steel_hull_rain.wav';
+  static const String audioFoghornBell = '$_audio/foghorn_bell.wav';
+
+  /// Calming breathing-pace pad looped under the Tidal Breath exercise.
+  static const String audioTidalBreath = '$_audio/tidal_breath.wav';
+
+  /// Spoken-word narration placeholder for the featured Lighthouse chapter
+  /// (macOS `say -v Daniel`, encoded to AAC/M4A via `afconvert`).
+  static const String audioLighthouseChapter = '$_audio/lighthouse_chapter.m4a';
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../core/app_assets.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
+import '../widgets/ambient_pulse_background.dart';
 import '../widgets/back_header.dart';
 import '../widgets/glass_icon_button.dart';
 
@@ -12,9 +14,10 @@ import '../widgets/glass_icon_button.dart';
 /// driven entirely by this model so it can host any story in the catalog, not
 /// just the featured "Lighthouse at Cape Horn".
 ///
-/// Stage 1 is visual-only: durations/progress are static presentation values
-/// (no real audio engine yet), but the shape is ready for a later stage to
-/// bind to an actual player.
+/// As of Stage 2 the player drives real narration via [audioAsset]; the static
+/// [currentTime]/[remainingTime]/[progress] fields remain as the design's
+/// resting-state presentation values (and fallbacks before the player reports
+/// a duration).
 class StoryData {
   const StoryData({
     required this.title,
@@ -32,6 +35,7 @@ class StoryData {
     required this.remainingTime,
     required this.progress,
     this.tuningNote = '432Hz Tuning Active',
+    this.audioAsset = AppAssets.audioLighthouseChapter,
   });
 
   final String title;
@@ -49,6 +53,11 @@ class StoryData {
   final String remainingTime; // e.g. "-13:18"
   final double progress; // 0..1 of the current chapter
   final String tuningNote;
+
+  /// Bundled narration track for this story. Stage 2 ships a single spoken-word
+  /// placeholder (the Lighthouse chapter) that every story currently reuses;
+  /// swap per-story paths here when real narration lands.
+  final String audioAsset;
 }
 
 /// A labelled mood/voice chip shown beneath the story title.
@@ -141,9 +150,11 @@ abstract final class SeaStories {
 
 /// Story playback session (Stitch "story_lighthouse_cape_horn" redesign).
 ///
-/// Stage 1: fully static/visual — the transport controls, scrubber, tuning
-/// toggles and sleep timer are presentational placeholders. No real audio is
-/// played. A later stage will bind these to a player.
+/// Stage 2: the transport controls (play/pause, ±skip), the waveform/scrubber
+/// progress and the elapsed/remaining readouts are bound to a real [AudioPlayer]
+/// playing the story's narration, and the speed chip sets real playback speed.
+/// The sleep timer, gentle-fadeout toggle and ambient-blend slider remain
+/// presentational placeholders for a later stage.
 class StoryPlaybackScreen extends StatefulWidget {
   const StoryPlaybackScreen({super.key, required this.story});
 
@@ -155,6 +166,9 @@ class StoryPlaybackScreen extends StatefulWidget {
 
 class _StoryPlaybackScreenState extends State<StoryPlaybackScreen> {
   static const List<String> _speeds = ['0.8x Pace', '1.0x Pace', '1.2x Pace'];
+  static const List<double> _speedValues = [0.8, 1.0, 1.2];
+  static const Duration _skipBack = Duration(seconds: 15);
+  static const Duration _skipForward = Duration(seconds: 30);
   static const List<String> _timers = [
     '15m Sleep Timer',
     '30m Sleep Timer',
@@ -162,15 +176,90 @@ class _StoryPlaybackScreenState extends State<StoryPlaybackScreen> {
     'Timer Off',
   ];
 
-  bool _isPlaying = true;
+  final AudioPlayer _player = AudioPlayer();
+
+  bool _isPlaying = false;
   bool _isFavourite = false;
   bool _gentleFadeout = true;
   int _speedIndex = 1;
   int _timerIndex = 1;
   double _blend = 45;
   bool _excerptExpanded = true;
+  Duration _duration = Duration.zero;
 
   StoryData get _story => widget.story;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAudio();
+  }
+
+  Future<void> _initAudio() async {
+    // Reflect player state in the UI (play/pause icon + pulse animation).
+    _player.playingStream.listen((playing) {
+      if (mounted) setState(() => _isPlaying = playing);
+    });
+    _player.durationStream.listen((d) {
+      if (mounted && d != null) setState(() => _duration = d);
+    });
+    // Loop back to the start when narration completes so the screen settles
+    // on a paused, ready-to-replay state rather than dead-ending.
+    _player.processingStateStream.listen((state) async {
+      if (state == ProcessingState.completed) {
+        await _player.pause();
+        await _player.seek(Duration.zero);
+      }
+    });
+    try {
+      await _player.setAsset(_story.audioAsset);
+      await _player.setSpeed(_speedValues[_speedIndex]);
+      await _player.play();
+    } catch (_) {
+      // No audio hardware (e.g. tests / unsupported platform): fail quietly and
+      // leave the transport controls in their paused state.
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePlay() async {
+    if (_player.playing) {
+      await _player.pause();
+    } else {
+      // Restart from the top if we finished.
+      if (_player.processingState == ProcessingState.completed) {
+        await _player.seek(Duration.zero);
+      }
+      await _player.play();
+    }
+  }
+
+  Future<void> _skip(Duration delta) async {
+    final target = _player.position + delta;
+    final total = _duration;
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (total > Duration.zero && target > total ? total : target);
+    await _player.seek(clamped);
+  }
+
+  Future<void> _cycleSpeed() async {
+    final next = (_speedIndex + 1) % _speeds.length;
+    setState(() => _speedIndex = next);
+    await _player.setSpeed(_speedValues[next]);
+  }
+
+  static String _fmt(Duration d) {
+    final total = d.inSeconds;
+    final m = (total ~/ 60).toString().padLeft(2, '0');
+    final s = (total % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -201,11 +290,12 @@ class _StoryPlaybackScreenState extends State<StoryPlaybackScreen> {
                       _UtilityBar(
                         timerLabel: _timers[_timerIndex],
                         onTimer: () => setState(
-                          () => _timerIndex = (_timerIndex + 1) % _timers.length,
+                          () =>
+                              _timerIndex = (_timerIndex + 1) % _timers.length,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _CoverArt(story: _story),
+                      _CoverArt(story: _story, playing: _isPlaying),
                       const SizedBox(height: 16),
                       _TrackDetails(
                         story: _story,
@@ -214,26 +304,44 @@ class _StoryPlaybackScreenState extends State<StoryPlaybackScreen> {
                             setState(() => _isFavourite = !_isFavourite),
                       ),
                       const SizedBox(height: 16),
-                      _Waveform(progress: _story.progress),
-                      const SizedBox(height: 8),
-                      _Scrubber(
-                        currentTime: _story.currentTime,
-                        remainingTime: _story.remainingTime,
-                        chapterProgress: _story.chapterProgress,
-                        value: _story.progress,
+                      StreamBuilder<Duration>(
+                        stream: _player.positionStream,
+                        builder: (context, snapshot) {
+                          final position = snapshot.data ?? Duration.zero;
+                          final total = _duration;
+                          final progress = total.inMilliseconds > 0
+                              ? (position.inMilliseconds / total.inMilliseconds)
+                                    .clamp(0.0, 1.0)
+                              : 0.0;
+                          final remaining = total > position
+                              ? total - position
+                              : Duration.zero;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _Waveform(progress: progress),
+                              const SizedBox(height: 8),
+                              _Scrubber(
+                                currentTime: _fmt(position),
+                                remainingTime: '-${_fmt(remaining)}',
+                                chapterProgress: _story.chapterProgress,
+                                value: progress,
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 8),
                       _TransportControls(
                         isPlaying: _isPlaying,
-                        onPlayPause: () =>
-                            setState(() => _isPlaying = !_isPlaying),
+                        onPlayPause: _togglePlay,
+                        onSkipBack: () => _skip(-_skipBack),
+                        onSkipForward: () => _skip(_skipForward),
                       ),
                       const SizedBox(height: 16),
                       _TuningCard(
                         speedLabel: _speeds[_speedIndex],
-                        onSpeed: () => setState(
-                          () => _speedIndex = (_speedIndex + 1) % _speeds.length,
-                        ),
+                        onSpeed: _cycleSpeed,
                         gentleFadeout: _gentleFadeout,
                         onFadeout: (v) => setState(() => _gentleFadeout = v),
                         blend: _blend,
@@ -348,9 +456,10 @@ class _Pill extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _CoverArt extends StatelessWidget {
-  const _CoverArt({required this.story});
+  const _CoverArt({required this.story, required this.playing});
 
   final StoryData story;
+  final bool playing;
 
   @override
   Widget build(BuildContext context) {
@@ -389,6 +498,13 @@ class _CoverArt extends StatelessWidget {
                       ],
                     ),
                   ),
+                ),
+              ),
+              // Meditative glow that breathes while narration is playing.
+              Positioned.fill(
+                child: AmbientPulseBackground(
+                  playing: playing,
+                  period: const Duration(seconds: 8),
                 ),
               ),
               Center(
@@ -438,7 +554,9 @@ class _CoverArt extends StatelessWidget {
                   ),
                   child: Text(
                     story.coordinates,
-                    style: AppTextStyles.caption.copyWith(color: AppColors.cream),
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.cream,
+                    ),
                   ),
                 ),
               ),
@@ -486,10 +604,7 @@ class _TrackDetails extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    story.title,
-                    style: AppTextStyles.headerTitle,
-                  ),
+                  Text(story.title, style: AppTextStyles.headerTitle),
                   const SizedBox(height: 4),
                   Text(
                     '${story.series} • Narrated by ${story.narrator}',
@@ -675,17 +790,21 @@ class _TransportControls extends StatelessWidget {
   const _TransportControls({
     required this.isPlaying,
     required this.onPlayPause,
+    required this.onSkipBack,
+    required this.onSkipForward,
   });
 
   final bool isPlaying;
   final VoidCallback onPlayPause;
+  final VoidCallback onSkipBack;
+  final VoidCallback onSkipForward;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _SkipButton(icon: Icons.replay_10, label: '15s', onTap: () {}),
+        _SkipButton(icon: Icons.replay_10, label: '15s', onTap: onSkipBack),
         const SizedBox(width: 28),
         Material(
           color: AppColors.seafoam,
@@ -705,7 +824,7 @@ class _TransportControls extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 28),
-        _SkipButton(icon: Icons.forward_30, label: '30s', onTap: () {}),
+        _SkipButton(icon: Icons.forward_30, label: '30s', onTap: onSkipForward),
       ],
     );
   }
@@ -883,11 +1002,7 @@ class _TuningCard extends StatelessWidget {
               overlayColor: AppColors.seafoamFaint,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
             ),
-            child: Slider(
-              value: blend,
-              max: 100,
-              onChanged: onBlend,
-            ),
+            child: Slider(value: blend, max: 100, onChanged: onBlend),
           ),
         ],
       ),
@@ -981,7 +1096,10 @@ class _ChapterCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: const [
-                _ElementBadge(icon: Icons.water_drop, label: 'Rain on Skylight'),
+                _ElementBadge(
+                  icon: Icons.water_drop,
+                  label: 'Rain on Skylight',
+                ),
                 _ElementBadge(icon: Icons.sailing, label: 'Timber Creaks'),
               ],
             ),

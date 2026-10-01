@@ -84,6 +84,12 @@ abstract final class AppColors {
   /// Drop shadow beneath raised cards / CTAs.
   static const Color cardShadow = Color(0x4D070F2B); // #070F2B @ 30%
 
+  // --- Meditative playback glows (Stage 2 audio-synced animations) ----------
+  /// Soft seafoam glow core for the pulsing background while audio plays.
+  static const Color seafoamGlow = Color(0x4D57CC99); // seafoam @ 30%
+  /// Fainter teal glow ring that trails the seafoam core.
+  static const Color tealGlow = Color(0x3338A3A5); // teal @ 20%
+
   // --- Gradients ------------------------------------------------------------
   /// The single app-wide screen background gradient
   /// (#0A1E36 → #2E5C70 @70% → #E09F67 @100%). Used on every screen.

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../core/app_assets.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
+import '../widgets/ambient_pulse_background.dart';
 import '../widgets/tide_bottom_nav.dart';
 import 'guided_breathing_screen.dart';
 import 'story_playback_screen.dart';
@@ -13,9 +15,11 @@ import 'story_playback_screen.dart';
 ///
 /// Replaces the old direct-to-breathing "Breathe" tab: the hub gathers the
 /// Tidal Breath regulation session, watch-reset drills, sleep lore / sea
-/// stories, and ambient soundscapes. Stage 1 is visual — only the Tidal Breath
-/// CTA and the story cards navigate to working screens; drills and soundscapes
-/// are presentational (soundscapes offer a local selected-state toggle only).
+/// stories, and ambient soundscapes. The Tidal Breath CTA and the story cards
+/// navigate to working screens, and (Stage 2) the Ambient Cabin Soundscape
+/// tiles toggle real looping playback of their generated beds — one at a time,
+/// with a meditative glow behind the active tile. The watch-reset drills remain
+/// presentational.
 class HavenScreen extends StatefulWidget {
   const HavenScreen({super.key});
 
@@ -24,11 +28,59 @@ class HavenScreen extends StatefulWidget {
 }
 
 class _HavenScreenState extends State<HavenScreen> {
-  int? _activeSound;
+  /// Soundscape tile index -> looping ambient bed. Only one plays at a time.
+  static const List<String> _soundAssets = [
+    AppAssets.audioRollingDeepSea,
+    AppAssets.audioSteelHullRain,
+    AppAssets.audioFoghornBell,
+  ];
 
-  void _openStory(StoryData story) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => StoryPlaybackScreen(story: story)),
+  final AudioPlayer _ambientPlayer = AudioPlayer();
+  int? _activeSound;
+  bool _ambientPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ambientPlayer.playingStream.listen((playing) {
+      if (mounted) setState(() => _ambientPlaying = playing);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ambientPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleSound(int index) async {
+    // Tapping the active tile stops it; tapping another switches the bed.
+    if (_activeSound == index) {
+      setState(() => _activeSound = null);
+      await _ambientPlayer.stop();
+      return;
+    }
+    setState(() => _activeSound = index);
+    try {
+      await _ambientPlayer.setAsset(_soundAssets[index]);
+      await _ambientPlayer.setLoopMode(LoopMode.one);
+      await _ambientPlayer.play();
+    } catch (_) {
+      // No audio hardware (tests / unsupported): keep the visual selection.
+    }
+  }
+
+  Future<void> _openStory(StoryData story) async {
+    // Hand the audio focus to the narration screen.
+    if (_activeSound != null) {
+      setState(() => _activeSound = null);
+      await _ambientPlayer.stop();
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StoryPlaybackScreen(story: story),
+      ),
     );
   }
 
@@ -72,17 +124,21 @@ class _HavenScreenState extends State<HavenScreen> {
                         trailing: '350MB Cached',
                       ),
                       const SizedBox(height: 12),
-                      _FeaturedLore(onTap: () => _openStory(SeaStories.lighthouse)),
+                      _FeaturedLore(
+                        onTap: () => _openStory(SeaStories.lighthouse),
+                      ),
                       const SizedBox(height: 12),
                       _LoreItem(
                         title: 'Stars Over the Pacific',
-                        subtitle: 'Polynesian wayfinding & quiet tide drift • 18 min',
+                        subtitle:
+                            'Polynesian wayfinding & quiet tide drift • 18 min',
                         onTap: () => _openStory(SeaStories.starsOverPacific),
                       ),
                       const SizedBox(height: 12),
                       _LoreItem(
                         title: "St. Elmo's Light",
-                        subtitle: 'Folkloric lullaby for restless anchor watch • 15 min',
+                        subtitle:
+                            'Folkloric lullaby for restless anchor watch • 15 min',
                         onTap: () => _openStory(SeaStories.stElmosLight),
                       ),
                       const SizedBox(height: 24),
@@ -93,9 +149,8 @@ class _HavenScreenState extends State<HavenScreen> {
                       const SizedBox(height: 12),
                       _SoundscapeGrid(
                         active: _activeSound,
-                        onToggle: (i) => setState(
-                          () => _activeSound = _activeSound == i ? null : i,
-                        ),
+                        playing: _ambientPlaying,
+                        onToggle: _toggleSound,
                       ),
                     ],
                   ),
@@ -160,10 +215,7 @@ class _HavenHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const _MiniPill(
-                icon: Icons.cloud_off,
-                label: 'Offline Cached',
-              ),
+              const _MiniPill(icon: Icons.cloud_off, label: 'Offline Cached'),
             ],
           ),
           const SizedBox(height: 14),
@@ -387,7 +439,11 @@ class _MiniOrb extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: AppColors.breatheOrbGradient,
               boxShadow: [
-                BoxShadow(color: AppColors.teal, blurRadius: 18, spreadRadius: 1),
+                BoxShadow(
+                  color: AppColors.teal,
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
               ],
             ),
             child: Center(
@@ -428,7 +484,8 @@ class _DrillsRow extends StatelessWidget {
             tag: 'High Stress',
             tagColor: AppColors.stormRed,
             title: 'Heavy Weather Reset',
-            body: 'Emergency somato-sensory grounding drill for pitch swells '
+            body:
+                'Emergency somato-sensory grounding drill for pitch swells '
                 'and storm watches.',
             meta: '3 min • Audio guide',
           ),
@@ -439,7 +496,8 @@ class _DrillsRow extends StatelessWidget {
             tag: 'Noise Relief',
             tagColor: AppColors.sand,
             title: 'Engine Sound-Down',
-            body: 'Progressive somatic muscle release after 6 continuous hours '
+            body:
+                'Progressive somatic muscle release after 6 continuous hours '
                 'in high decibels.',
             meta: '7 min • Guided',
           ),
@@ -450,7 +508,8 @@ class _DrillsRow extends StatelessWidget {
             tag: 'Bunk Pre-Sleep',
             tagColor: AppColors.seafoam,
             title: 'Anchor Drop',
-            body: 'Head-to-toe gravity surrender to sleep steadily within '
+            body:
+                'Head-to-toe gravity surrender to sleep steadily within '
                 'rolling bunk quarters.',
             meta: '10 min • Body scan',
           ),
@@ -510,10 +569,7 @@ class _DrillCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.glassFillFaint,
                   borderRadius: BorderRadius.circular(AppTheme.radiusPill),
@@ -550,9 +606,7 @@ class _DrillCard extends StatelessWidget {
               Flexible(
                 child: Text(
                   meta,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.muted,
-                  ),
+                  style: AppTextStyles.caption.copyWith(color: AppColors.muted),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -612,7 +666,9 @@ class _FeaturedLore extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.sandFaint,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusPill,
+                        ),
                       ),
                       child: Text(
                         'Off-Watch Favorite',
@@ -763,9 +819,14 @@ class _LoreItem extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _SoundscapeGrid extends StatelessWidget {
-  const _SoundscapeGrid({required this.active, required this.onToggle});
+  const _SoundscapeGrid({
+    required this.active,
+    required this.playing,
+    required this.onToggle,
+  });
 
   final int? active;
+  final bool playing;
   final ValueChanged<int> onToggle;
 
   @override
@@ -785,6 +846,7 @@ class _SoundscapeGrid extends StatelessWidget {
               label: tiles[i].$2,
               sub: tiles[i].$3,
               selected: active == i,
+              playing: active == i && playing,
               onTap: () => onToggle(i),
             ),
           ),
@@ -800,6 +862,7 @@ class _SoundTile extends StatelessWidget {
     required this.label,
     required this.sub,
     required this.selected,
+    required this.playing,
     required this.onTap,
   });
 
@@ -807,6 +870,7 @@ class _SoundTile extends StatelessWidget {
   final String label;
   final String sub;
   final bool selected;
+  final bool playing;
   final VoidCallback onTap;
 
   @override
@@ -814,52 +878,59 @@ class _SoundTile extends StatelessWidget {
     return Material(
       color: selected ? AppColors.seafoamFaint : AppColors.cardSurface,
       borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-            border: Border.all(
-              color: selected ? AppColors.seafoamBorder : Colors.transparent,
+        child: AmbientPulseBackground(
+          playing: playing,
+          period: const Duration(seconds: 6),
+          intensity: 0.8,
+          alignment: Alignment.center,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+              border: Border.all(
+                color: selected ? AppColors.seafoamBorder : Colors.transparent,
+              ),
             ),
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.glassFill,
+            child: Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.glassFill,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: selected ? AppColors.seafoam : AppColors.cream,
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: selected ? AppColors.seafoam : AppColors.cream,
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.white,
-                  fontWeight: FontWeight.w600,
+                const SizedBox(height: 2),
+                Text(
+                  sub,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.caption.copyWith(fontSize: 10),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                sub,
-                textAlign: TextAlign.center,
-                style: AppTextStyles.caption.copyWith(fontSize: 10),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
