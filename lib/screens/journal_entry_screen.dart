@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../data/models/journal_entry.dart';
+import '../data/wellness_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -10,15 +12,77 @@ import '../widgets/tide_bottom_nav.dart';
 import 'mood_check_in_screen.dart';
 
 /// "Captain's Private Log" journal entry (Figma node 3:235 "journal-entry").
-class JournalEntryScreen extends StatelessWidget {
-  const JournalEntryScreen({super.key});
+///
+/// Stage 4: the writing slate is now a real text field, "Save" persists the
+/// entry on-device (awarding Fleet Knots), and previously filed logs are listed
+/// below.
+class JournalEntryScreen extends StatefulWidget {
+  const JournalEntryScreen({super.key, WellnessRepository? repository})
+    : _repository = repository;
 
-  static const String _entry =
-      'The watch tonight was exceptionally still. The swell was long and slow, '
-      'almost rocking the entire hull with a rhythmic hum. I spent ten minutes '
-      'on the bridge wing just listening to the spray cutting past the bow.\n\n'
-      'It made the distance from home feel a little more manageable. Writing '
-      'this down to lock away the noise of the generator deck below...';
+  final WellnessRepository? _repository;
+
+  /// The daily seaprompt persisted alongside each entry written today.
+  static const String dailyPrompt =
+      'What sound of the rigging or water brought you peace today?';
+
+  @override
+  State<JournalEntryScreen> createState() => _JournalEntryScreenState();
+}
+
+class _JournalEntryScreenState extends State<JournalEntryScreen> {
+  late final WellnessRepository _repo =
+      widget._repository ?? WellnessRepository();
+  final TextEditingController _controller = TextEditingController();
+
+  List<JournalEntry> _pastEntries = const [];
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEntries();
+  }
+
+  Future<void> _loadEntries() async {
+    final entries = await _repo.journalEntries();
+    if (!mounted) return;
+    setState(() {
+      _pastEntries = entries;
+      _loading = false;
+    });
+  }
+
+  Future<void> _save() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Write a few words before securing the log.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    await _repo.saveJournalEntry(
+      body: text,
+      prompt: JournalEntryScreen.dailyPrompt,
+    );
+    if (!mounted) return;
+    _controller.clear();
+    FocusScope.of(context).unfocus();
+    await _loadEntries();
+    if (!mounted) return;
+    setState(() => _saving = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Log secured in your ship vault. +40 knots')),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,15 +99,24 @@ class JournalEntryScreen extends StatelessWidget {
             children: [
               BackHeader(
                 title: "Captain's Private Log",
-                trailing: InkWell(
-                  onTap: () => Navigator.of(context).maybePop(),
-                  child: Text(
-                    'Save',
-                    style: AppTextStyles.bodyStrong.copyWith(
-                      color: AppColors.seafoam,
-                    ),
-                  ),
-                ),
+                trailing: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.seafoam,
+                        ),
+                      )
+                    : InkWell(
+                        onTap: _save,
+                        child: Text(
+                          'Save',
+                          style: AppTextStyles.bodyStrong.copyWith(
+                            color: AppColors.seafoam,
+                          ),
+                        ),
+                      ),
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 24),
@@ -65,9 +138,11 @@ class JournalEntryScreen extends StatelessWidget {
                       const SizedBox(height: 20),
                       const _PromptCard(),
                       const SizedBox(height: 20),
-                      const _WritingSlate(text: _entry),
+                      _WritingSlate(controller: _controller),
                       const SizedBox(height: 20),
                       const _SlateTools(),
+                      const SizedBox(height: 28),
+                      _PastEntries(loading: _loading, entries: _pastEntries),
                     ],
                   ),
                 ),
@@ -186,7 +261,7 @@ class _PromptCard extends StatelessWidget {
                 Text('DAILY SEAPROMPT', style: AppTextStyles.caption),
                 const SizedBox(height: 2),
                 Text(
-                  'What sound of the rigging or water brought you peace today?',
+                  JournalEntryScreen.dailyPrompt,
                   style: AppTextStyles.promptMedium,
                 ),
               ],
@@ -199,9 +274,9 @@ class _PromptCard extends StatelessWidget {
 }
 
 class _WritingSlate extends StatelessWidget {
-  const _WritingSlate({required this.text});
+  const _WritingSlate({required this.controller});
 
-  final String text;
+  final TextEditingController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -213,9 +288,27 @@ class _WritingSlate extends StatelessWidget {
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
       ),
-      child: Text(
-        text,
-        style: AppTextStyles.body.copyWith(color: AppColors.white, height: 1.6),
+      child: TextField(
+        controller: controller,
+        expands: true,
+        maxLines: null,
+        minLines: null,
+        textAlignVertical: TextAlignVertical.top,
+        keyboardType: TextInputType.multiline,
+        cursorColor: AppColors.seafoam,
+        style: AppTextStyles.body.copyWith(
+          color: AppColors.white,
+          height: 1.6,
+        ),
+        decoration: InputDecoration.collapsed(
+          hintText:
+              'Mark down the swell of your watch — the sounds, the distance '
+              'from home, the small steadying moments...',
+          hintStyle: AppTextStyles.body.copyWith(
+            color: AppColors.muted,
+            height: 1.6,
+          ),
+        ),
       ),
     );
   }
@@ -253,6 +346,110 @@ class _SlateTools extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _PastEntries extends StatelessWidget {
+  const _PastEntries({required this.loading, required this.entries});
+
+  final bool loading;
+  final List<JournalEntry> entries;
+
+  static const List<String> _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  static String _stamp(DateTime d) =>
+      '${_months[d.month - 1]} ${d.day}, ${d.year} · '
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'PAST LOG ENTRIES',
+          style: AppTextStyles.titleMedium.copyWith(color: AppColors.cream),
+        ),
+        const SizedBox(height: 12),
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.seafoam,
+                ),
+              ),
+            ),
+          )
+        else if (entries.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.glassFillFaint,
+              borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+              border: Border.all(color: AppColors.glassBorderSoft),
+            ),
+            child: Text(
+              'No logs filed yet. Your secured entries will surface here.',
+              style: AppTextStyles.bodySmall,
+            ),
+          )
+        else
+          for (final entry in entries) ...[
+            _PastEntryCard(stamp: _stamp(entry.createdAt), body: entry.body),
+            const SizedBox(height: 10),
+          ],
+      ],
+    );
+  }
+}
+
+class _PastEntryCard extends StatelessWidget {
+  const _PastEntryCard({required this.stamp, required this.body});
+
+  final String stamp;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SvgPicture.asset(AppAssets.mapPin, width: 14, height: 14),
+              const SizedBox(width: 8),
+              Text(stamp, style: AppTextStyles.caption),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.white,
+              height: 1.5,
+            ),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }

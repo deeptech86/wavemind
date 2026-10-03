@@ -10,6 +10,7 @@ import 'community_connect_screen.dart';
 import 'haven_screen.dart';
 import 'journal_entry_screen.dart';
 import 'off_watch_games_screen.dart';
+import 'profile_screen.dart';
 import 'story_playback_screen.dart';
 import 'weekly_insights_screen.dart';
 
@@ -144,15 +145,24 @@ class _UserProfileBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Container(
-          width: 48,
-          height: 48,
-          decoration: const BoxDecoration(
-            color: AppColors.cream,
-            shape: BoxShape.circle,
+        GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Image.asset(AppAssets.avatar, fit: BoxFit.cover),
+          child: Semantics(
+            button: true,
+            label: 'Open crew profile',
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: const BoxDecoration(
+                color: AppColors.cream,
+                shape: BoxShape.circle,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Image.asset(AppAssets.avatar, fit: BoxFit.cover),
+            ),
+          ),
         ),
       ],
     );

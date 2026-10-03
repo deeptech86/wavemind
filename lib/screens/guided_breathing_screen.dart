@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../core/app_assets.dart';
+import '../data/wellness_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/ambient_pulse_background.dart';
@@ -28,7 +29,10 @@ import '../widgets/back_header.dart';
 /// Reached from the Haven hub's "Cast Swell" CTA (not a top-level tab), so it
 /// carries no bottom navigation.
 class GuidedBreathingScreen extends StatefulWidget {
-  const GuidedBreathingScreen({super.key});
+  const GuidedBreathingScreen({super.key, WellnessRepository? repository})
+    : _repository = repository;
+
+  final WellnessRepository? _repository;
 
   @override
   State<GuidedBreathingScreen> createState() => _GuidedBreathingScreenState();
@@ -39,7 +43,15 @@ class _GuidedBreathingScreenState extends State<GuidedBreathingScreen>
   /// One full breathe (inhale + exhale) cycle, matched to the session pace.
   static const Duration _breathCycle = Duration(seconds: 8);
 
+  /// A session counts as "meaningfully progressed" (and is logged once to the
+  /// streak ledger) after this much actual playing time — roughly four full
+  /// breath cycles, enough to register as a real regulation session rather than
+  /// an accidental tap.
+  static const int _completionThresholdSeconds = 30;
+
   final AudioPlayer _player = AudioPlayer();
+  late final WellnessRepository _repo =
+      widget._repository ?? WellnessRepository();
   late final AnimationController _breathCtrl = AnimationController(
     vsync: this,
     duration: _breathCycle,
@@ -47,6 +59,7 @@ class _GuidedBreathingScreenState extends State<GuidedBreathingScreen>
 
   bool _isPlaying = false;
   bool _muted = false;
+  bool _sessionRecorded = false;
   Duration _elapsed = Duration.zero;
   Timer? _ticker;
 
@@ -78,7 +91,15 @@ class _GuidedBreathingScreenState extends State<GuidedBreathingScreen>
         _breathCtrl.repeat(reverse: true);
       }
       _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() => _elapsed += const Duration(seconds: 1));
+        if (!mounted) return;
+        setState(() => _elapsed += const Duration(seconds: 1));
+        if (!_sessionRecorded &&
+            _elapsed.inSeconds >= _completionThresholdSeconds) {
+          _sessionRecorded = true;
+          // Fire-and-forget: the ledger write awards the breathing-session
+          // knots and feeds the streak. Failures degrade silently (see repo).
+          _repo.recordBreathingSession(durationSeconds: _elapsed.inSeconds);
+        }
       });
     } else {
       _breathCtrl.stop();

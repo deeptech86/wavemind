@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../data/wellness_repository.dart';
+import '../data/wellness_stats.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -17,7 +19,10 @@ import 'anonymous_chat_screen.dart';
 ///
 /// Anchor Pool is the default so the existing wired flow stays front-and-centre.
 class CommunityConnectScreen extends StatefulWidget {
-  const CommunityConnectScreen({super.key});
+  const CommunityConnectScreen({super.key, WellnessRepository? repository})
+    : _repository = repository;
+
+  final WellnessRepository? _repository;
 
   @override
   State<CommunityConnectScreen> createState() => _CommunityConnectScreenState();
@@ -26,7 +31,22 @@ class CommunityConnectScreen extends StatefulWidget {
 enum _CrewTab { anchorPool, fleetSpirit }
 
 class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
+  late final WellnessRepository _repo =
+      widget._repository ?? WellnessRepository();
   _CrewTab _tab = _CrewTab.anchorPool;
+  ContributionSummary _summary = ContributionSummary.empty;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
+    final summary = await _repo.contributionSummary();
+    if (!mounted) return;
+    setState(() => _summary = summary);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +85,7 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
                           ),
                         )
                       else
-                        const _FleetSpiritView(),
+                        _FleetSpiritView(summary: _summary),
                     ],
                   ),
                 ),
@@ -425,20 +445,28 @@ class _GratitudeNote extends StatelessWidget {
 // ===========================================================================
 
 class _FleetSpiritView extends StatelessWidget {
-  const _FleetSpiritView();
+  const _FleetSpiritView({required this.summary});
+
+  final ContributionSummary summary;
 
   @override
   Widget build(BuildContext context) {
+    // The user's live rank among the (static) mock competitors, derived from
+    // their real Fleet Knots total.
+    final rank = WellnessStats.rankAmong(
+      summary.totalKnots,
+      _Leaderboard.competitorKnots,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        _VoyageMilestoneCard(),
-        SizedBox(height: 20),
-        _ContributionCard(),
-        SizedBox(height: 24),
-        _LeaderboardSection(),
-        SizedBox(height: 20),
-        _KnotsInfoDeck(),
+      children: [
+        const _VoyageMilestoneCard(),
+        const SizedBox(height: 20),
+        _ContributionCard(summary: summary, rank: rank),
+        const SizedBox(height: 24),
+        _LeaderboardSection(summary: summary),
+        const SizedBox(height: 20),
+        const _KnotsInfoDeck(),
       ],
     );
   }
@@ -588,7 +616,10 @@ class _VoyageMilestoneCard extends StatelessWidget {
 }
 
 class _ContributionCard extends StatelessWidget {
-  const _ContributionCard();
+  const _ContributionCard({required this.summary, required this.rank});
+
+  final ContributionSummary summary;
+  final int rank;
 
   @override
   Widget build(BuildContext context) {
@@ -608,10 +639,10 @@ class _ContributionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const _InitialsAvatar(
+              _InitialsAvatar(
                 initials: 'MT',
                 color: AppColors.teal,
-                rank: '#3',
+                rank: '#$rank',
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -634,7 +665,7 @@ class _ContributionCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '720',
+                    '${summary.totalKnots}',
                     style: AppTextStyles.headerTitle.copyWith(
                       color: AppColors.seafoam,
                     ),
@@ -648,15 +679,15 @@ class _ContributionCard extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: const [
+            children: [
               _KnotBadge(
                 icon: Icons.verified_outlined,
-                label: 'Steady Helm (7d Streak)',
+                label: 'Steady Helm (${summary.breathStreakDays}d Streak)',
                 color: AppColors.seafoam,
               ),
               _KnotBadge(
-                icon: Icons.volunteer_activism_outlined,
-                label: '12 Gratitude Bottles Cast',
+                icon: Icons.menu_book_outlined,
+                label: '${summary.seaLogsFiled} Sea Logs Filed',
                 color: AppColors.sand,
               ),
             ],
@@ -704,11 +735,88 @@ class _KnotBadge extends StatelessWidget {
   }
 }
 
+/// A single leaderboard competitor. The four non-user crew are fixed mock data
+/// (there is no multi-user backend); only the "You" row is backed by real
+/// on-device stats.
+class _LeaderEntry {
+  const _LeaderEntry({
+    required this.initials,
+    required this.color,
+    required this.name,
+    required this.note,
+    required this.knots,
+    this.tag,
+    this.isUser = false,
+  });
+
+  final String initials;
+  final Color color;
+  final String name;
+  final String note;
+  final int knots;
+  final String? tag;
+  final bool isUser;
+}
+
+/// Static competitor roster (and their fixed knot totals) used both to render
+/// the other rows and to rank the real user against them.
+abstract final class _Leaderboard {
+  static const List<_LeaderEntry> competitors = [
+    _LeaderEntry(
+      initials: 'LS',
+      color: AppColors.seafoam,
+      name: 'Bosun Liam S.',
+      note: '14-day steady swell streak',
+      knots: 850,
+      tag: 'Fleet Beacon',
+    ),
+    _LeaderEntry(
+      initials: 'DK',
+      color: AppColors.sand,
+      name: 'Chief Eng. Dave K.',
+      note: '9 sound-down cabin rests logged',
+      knots: 780,
+    ),
+    _LeaderEntry(
+      initials: 'ER',
+      color: AppColors.teal,
+      name: 'Deckhand Elena R.',
+      note: '10 tidal breath resets',
+      knots: 650,
+    ),
+    _LeaderEntry(
+      initials: 'AM',
+      color: AppColors.sand,
+      name: 'Cadet Aris M.',
+      note: 'First Voyage Star • 6 logs true',
+      knots: 590,
+    ),
+  ];
+
+  static List<int> get competitorKnots =>
+      [for (final c in competitors) c.knots];
+}
+
 class _LeaderboardSection extends StatelessWidget {
-  const _LeaderboardSection();
+  const _LeaderboardSection({required this.summary});
+
+  final ContributionSummary summary;
 
   @override
   Widget build(BuildContext context) {
+    // Merge the real "You" row into the static roster and sort by knots so the
+    // user always sits in a position consistent with their real total.
+    final you = _LeaderEntry(
+      initials: 'MT',
+      color: AppColors.teal,
+      name: 'Marcus Thorne (You)',
+      note: '${summary.seaLogsFiled} sea logs filed',
+      knots: summary.totalKnots,
+      isUser: true,
+    );
+    final entries = [..._Leaderboard.competitors, you]
+      ..sort((a, b) => b.knots.compareTo(a.knots));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -766,52 +874,19 @@ class _LeaderboardSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        const _LeaderRow(
-          rank: 1,
-          initials: 'LS',
-          color: AppColors.seafoam,
-          name: 'Bosun Liam S.',
-          note: '14-day steady swell streak',
-          knots: '850',
-          tag: 'Fleet Beacon',
-        ),
-        const SizedBox(height: 10),
-        const _LeaderRow(
-          rank: 2,
-          initials: 'DK',
-          color: AppColors.sand,
-          name: 'Chief Eng. Dave K.',
-          note: '9 sound-down cabin rests logged',
-          knots: '780',
-        ),
-        const SizedBox(height: 10),
-        const _LeaderRow(
-          rank: 3,
-          initials: 'MT',
-          color: AppColors.teal,
-          name: 'Marcus Thorne (You)',
-          note: '12 Gratitude Bottles Cast',
-          knots: '720',
-          highlighted: true,
-        ),
-        const SizedBox(height: 10),
-        const _LeaderRow(
-          rank: 4,
-          initials: 'ER',
-          color: AppColors.teal,
-          name: 'Deckhand Elena R.',
-          note: '10 tidal breath resets',
-          knots: '650',
-        ),
-        const SizedBox(height: 10),
-        const _LeaderRow(
-          rank: 5,
-          initials: 'AM',
-          color: AppColors.sand,
-          name: 'Cadet Aris M.',
-          note: 'First Voyage Star • 6 logs true',
-          knots: '590',
-        ),
+        for (var i = 0; i < entries.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          _LeaderRow(
+            rank: i + 1,
+            initials: entries[i].initials,
+            color: entries[i].color,
+            name: entries[i].name,
+            note: entries[i].note,
+            knots: '${entries[i].knots}',
+            tag: entries[i].tag,
+            highlighted: entries[i].isUser,
+          ),
+        ],
       ],
     );
   }
