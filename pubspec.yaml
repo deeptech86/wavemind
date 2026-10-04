@@ -49,6 +49,12 @@ dependencies:
   # Stage 4 — tiny remote profile backend (name/email/phone only).
   http: ^1.2.2
 
+  # Stage 3 — tilt sensing for the Sextant Horizon Balance game.
+  sensors_plus: ^7.1.1
+
+  # @visibleForTesting on the (Flutter-free) Dominoes engine's test constructor.
+  meta: ^1.16.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

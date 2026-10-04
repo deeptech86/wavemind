@@ -6,7 +6,10 @@ import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/back_header.dart';
+import 'cabin_dominoes_screen.dart';
+import 'knot_master_screen.dart';
 import 'mindful_game_screen.dart';
+import 'sextant_horizon_screen.dart';
 
 /// "Off-Watch Mind Games" hub (Stitch "offwatch_mind_games" redesign).
 ///
@@ -100,12 +103,17 @@ class OffWatchGamesScreen extends StatelessWidget {
                         icon: AppAssets.anchor,
                         accent: AppColors.teal,
                         title: 'Knot Master 3D',
-                        badge: 'Tactile Focus',
+                        badge: 'Ready',
                         description:
                             'Untie foul anchors and tie perfect bowlines '
                             'against gentle haptic feedback.',
                         meta: 'Haptics on • 4-6m',
-                        onTap: () => _comingSoon(context, 'Knot Master 3D'),
+                        ready: true,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const KnotMasterScreen(),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _CatalogTile(
@@ -124,26 +132,34 @@ class OffWatchGamesScreen extends StatelessWidget {
                         icon: AppAssets.compass,
                         accent: AppColors.seafoam,
                         title: 'Sextant Horizon Balance',
-                        badge: 'Vestibular Reset',
+                        badge: 'Ready',
                         description:
                             'Gentle gyroscopic horizon leveler keeping the '
                             'spirit bubble centered against swell roll.',
                         meta: 'Gyro sensory • 3-5m',
-                        onTap: () =>
-                            _comingSoon(context, 'Sextant Horizon Balance'),
+                        ready: true,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const SextantHorizonScreen(),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _CatalogTile(
                         icon: AppAssets.shell,
                         accent: AppColors.sand,
-                        title: 'Cabin Dominoes & Cribbage',
-                        badge: 'Mess Deck Social',
+                        title: 'Cabin Dominoes',
+                        badge: 'Ready',
                         description:
-                            'Asynchronous cozy turn-based board games to '
-                            'challenge off-watch crewmates without internet.',
-                        meta: 'Local mesh • 2-4 crew',
-                        onTap: () =>
-                            _comingSoon(context, 'Cabin Dominoes & Cribbage'),
+                            'Cozy pass-and-play dominoes to challenge an '
+                            'off-watch crewmate on one device, no internet.',
+                        meta: 'Pass & play • 2 crew',
+                        ready: true,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const CabinDominoesScreen(),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 20),
                       const _NightVisionNotice(),

@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tidewell_app/screens/anonymous_chat_screen.dart';
+import 'package:tidewell_app/screens/cabin_dominoes_screen.dart';
 import 'package:tidewell_app/screens/community_connect_screen.dart';
 import 'package:tidewell_app/screens/guided_breathing_screen.dart';
 import 'package:tidewell_app/screens/haven_screen.dart';
 import 'package:tidewell_app/screens/journal_entry_screen.dart';
+import 'package:tidewell_app/screens/knot_master_screen.dart';
 import 'package:tidewell_app/screens/mindful_game_screen.dart';
 import 'package:tidewell_app/screens/mood_check_in_screen.dart';
 import 'package:tidewell_app/screens/off_watch_games_screen.dart';
+import 'package:tidewell_app/screens/sextant_horizon_screen.dart';
 import 'package:tidewell_app/screens/story_playback_screen.dart';
 import 'package:tidewell_app/screens/weekly_insights_screen.dart';
 
@@ -94,5 +97,34 @@ void main() {
     await pumpScreen(tester, const AnonymousChatScreen());
     expect(find.text('Safe Harbor Chat'), findsOneWidget);
     expect(find.text('Quiet Lighthouse'), findsWidgets);
+  });
+
+  testWidgets('knot master renders its tying arena', (tester) async {
+    await pumpScreen(tester, const KnotMasterScreen());
+    expect(find.text('Knot Master 3D'), findsOneWidget);
+    expect(find.text('Tie the Bowline'), findsOneWidget);
+    // Dispose the repeating pulse controller before the test ends.
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('sextant horizon renders its vial', (tester) async {
+    await pumpScreen(tester, const SextantHorizonScreen());
+    expect(find.text('Sextant Horizon Balance'), findsOneWidget);
+    expect(find.text('Hold the Horizon'), findsOneWidget);
+    // Dispose the periodic calm-meter ticker + sensor subscription.
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('cabin dominoes renders its board', (tester) async {
+    await pumpScreen(tester, const CabinDominoesScreen());
+    expect(find.text('Cabin Dominoes'), findsOneWidget);
+    expect(find.text('THE LINE'), findsOneWidget);
+  });
+
+  testWidgets('off-watch games hub wires the three new games', (tester) async {
+    await pumpScreen(tester, const OffWatchGamesScreen());
+    expect(find.text('Knot Master 3D'), findsOneWidget);
+    expect(find.text('Sextant Horizon Balance'), findsOneWidget);
+    expect(find.text('Cabin Dominoes'), findsOneWidget);
   });
 }
