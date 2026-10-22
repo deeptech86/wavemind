@@ -105,8 +105,8 @@ class OffWatchGamesScreen extends StatelessWidget {
                         title: 'Knot Master 3D',
                         badge: 'Ready',
                         description:
-                            'Untie foul anchors and tie perfect bowlines '
-                            'against gentle haptic feedback.',
+                            'Run the rope through every loop and close it '
+                            'clean — no crossing lines — with haptic feedback.',
                         meta: 'Haptics on • 4-6m',
                         ready: true,
                         onTap: () => Navigator.of(context).push(

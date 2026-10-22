@@ -11,13 +11,14 @@ import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/back_header.dart';
 
-/// "Knot Master 3D" — a tactile rope-tying focus puzzle.
+/// "Knot Master 3D" — a tactile loop-tying focus puzzle.
 ///
-/// The player drags the rope's working end through a sequence of loop /
-/// anchor-point targets in the correct order to tie a (simplified) bowline.
-/// Each correct thread ticks a light haptic, a foul move a sharp one, and
-/// securing the knot plays a short celebratory haptic sequence. The threading
-/// order is randomized every round so it stays replayable.
+/// Loops are scattered at random each round. The player drags the rope's
+/// working end from the anchor through every other loop — in any order they
+/// like — and finally back to the anchor, forming a closed loop. The single
+/// rule: a newly-run line may never cross a line already run. A clean segment
+/// ticks a light haptic, a crossing fouls the knot with a sharp buzz, and
+/// closing a clean loop plays a short celebratory sequence.
 ///
 /// Haptics use [HapticFeedback] from `flutter/services.dart` (no extra package).
 /// This game intentionally awards no Fleet Knots — only mood check-ins,
@@ -32,45 +33,57 @@ class KnotMasterScreen extends StatefulWidget {
 }
 
 class _KnotMasterScreenState extends State<KnotMasterScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final Random _random = widget._random ?? Random();
-  late KnotPuzzle _puzzle = KnotPuzzle.shuffled(random: _random);
+  late KnotPuzzle _puzzle = KnotPuzzle.random(random: _random);
 
   late final AnimationController _pulseCtrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1600),
   )..repeat(reverse: true);
 
-  /// The id of the target that just received a foul drop, flashed briefly.
-  int? _foulTargetId;
+  /// Drives the red flash of the crossing lines the instant a knot fouls,
+  /// before the failure banner is revealed.
+  late final AnimationController _flashCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+  );
+
+  /// Gate for the failure UI — held back for one brief flash after an overlap
+  /// so the crossing reads clearly before the "Try Again" state appears.
+  bool _failureRevealed = false;
 
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    _flashCtrl.dispose();
     super.dispose();
   }
 
-  void _thread(int targetId) {
-    if (_puzzle.isComplete) return;
-    final result = _puzzle.registerTarget(targetId);
+  void _connect(int loopId) {
+    if (!_puzzle.isInProgress) return;
+    final result = _puzzle.connect(loopId);
     switch (result) {
-      case KnotStepResult.correct:
+      case KnotStepResult.connected:
         HapticFeedback.lightImpact();
-        setState(() => _foulTargetId = null);
-      case KnotStepResult.completed:
+        setState(() {});
+      case KnotStepResult.closed:
         _playSuccessHaptics();
-        setState(() => _foulTargetId = null);
-      case KnotStepResult.wrong:
+        setState(() {});
+      case KnotStepResult.overlap:
         HapticFeedback.heavyImpact();
-        setState(() => _foulTargetId = targetId);
-        Future.delayed(const Duration(milliseconds: 350), () {
+        _flashCtrl.forward(from: 0).then((_) => _flashCtrl.reverse());
+        setState(() => _failureRevealed = false);
+        Future.delayed(const Duration(milliseconds: 620), () {
           if (!mounted) return;
-          setState(() => _foulTargetId = null);
+          setState(() => _failureRevealed = true);
         });
+      case KnotStepResult.rejected:
+        break;
     }
   }
 
-  /// A short ascending celebratory sequence on completing the knot.
+  /// A short ascending celebratory sequence on securing the loop.
   Future<void> _playSuccessHaptics() async {
     HapticFeedback.lightImpact();
     await Future.delayed(const Duration(milliseconds: 110));
@@ -81,14 +94,16 @@ class _KnotMasterScreenState extends State<KnotMasterScreen>
 
   void _newRound() {
     HapticFeedback.selectionClick();
+    _flashCtrl.value = 0;
     setState(() {
-      _puzzle = KnotPuzzle.shuffled(random: _random);
-      _foulTargetId = null;
+      _puzzle = KnotPuzzle.random(random: _random);
+      _failureRevealed = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final showFailure = _puzzle.isFailed && _failureRevealed;
     return Scaffold(
       body: DecoratedBox(
         decoration: const BoxDecoration(
@@ -113,19 +128,18 @@ class _KnotMasterScreenState extends State<KnotMasterScreen>
                       _KnotArena(
                         puzzle: _puzzle,
                         pulse: _pulseCtrl,
-                        foulTargetId: _foulTargetId,
-                        onThread: _thread,
+                        flash: _flashCtrl,
+                        onConnect: _connect,
                       ),
                       const SizedBox(height: 16),
-                      if (_puzzle.isComplete)
+                      if (_puzzle.isSuccess)
                         const _KnotSecuredBanner()
+                      else if (showFailure)
+                        const _KnotFouledBanner()
                       else
-                        const _KnotHint(),
+                        _KnotHint(puzzle: _puzzle),
                       const SizedBox(height: 16),
-                      _NewRoundButton(
-                        complete: _puzzle.isComplete,
-                        onTap: _newRound,
-                      ),
+                      _NewRoundButton(phase: _puzzle.phase, onTap: _newRound),
                     ],
                   ),
                 ),
@@ -165,11 +179,12 @@ class _KnotIntro extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text('Tie the Bowline', style: AppTextStyles.cardHeading),
+          Text('Close the Loop', style: AppTextStyles.cardHeading),
           const SizedBox(height: 8),
           Text(
-            'Drag the rope end through each glowing loop in order. Feel the '
-            'line seat home with every true pass; a foul pass buzzes back.',
+            'Run the rope through every loop — in any order you like — then '
+            'close it back onto the anchor. Keep the line clean: if a new pass '
+            'crosses one already run, the knot fouls and you lay a fresh one.',
             style: AppTextStyles.bodySmall.copyWith(color: AppColors.bodyMist),
           ),
         ],
@@ -185,18 +200,20 @@ class _KnotProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fouled = puzzle.isFailed;
+    final accent = fouled ? AppColors.stormRed : AppColors.teal;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Rope seated', style: AppTextStyles.caption),
+            Text('Lines run', style: AppTextStyles.caption),
             Text(
-              '${puzzle.progress} / ${puzzle.totalSteps}',
+              '${puzzle.segmentsDrawn} / ${puzzle.totalSegments}',
               style: AppTextStyles.badge.copyWith(
                 fontSize: 12,
-                color: AppColors.teal,
+                color: accent,
               ),
             ),
           ],
@@ -208,7 +225,7 @@ class _KnotProgress extends StatelessWidget {
             value: puzzle.fraction,
             minHeight: 8,
             backgroundColor: AppColors.cardSurface,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.teal),
+            valueColor: AlwaysStoppedAnimation<Color>(accent),
           ),
         ),
       ],
@@ -220,16 +237,16 @@ class _KnotArena extends StatelessWidget {
   const _KnotArena({
     required this.puzzle,
     required this.pulse,
-    required this.foulTargetId,
-    required this.onThread,
+    required this.flash,
+    required this.onConnect,
   });
 
   final KnotPuzzle puzzle;
   final Animation<double> pulse;
-  final int? foulTargetId;
-  final ValueChanged<int> onThread;
+  final Animation<double> flash;
+  final ValueChanged<int> onConnect;
 
-  static const double _targetSize = 52;
+  static const double _targetSlot = 56;
 
   @override
   Widget build(BuildContext context) {
@@ -252,18 +269,23 @@ class _KnotArena extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
               child: Stack(
                 children: [
-                  // The rope threaded so far, painted beneath the loops.
+                  // The rope path, painted beneath the loops.
                   Positioned.fill(
-                    child: CustomPaint(
-                      painter: _RopePainter(
-                        puzzle: puzzle,
-                        size: Size(width, height),
+                    child: AnimatedBuilder(
+                      animation: flash,
+                      builder: (context, _) => CustomPaint(
+                        painter: _RopePainter(
+                          puzzle: puzzle,
+                          size: Size(width, height),
+                          flash: flash.value,
+                        ),
                       ),
                     ),
                   ),
                   for (final target in puzzle.targets)
                     _buildTarget(target, width, height),
-                  if (!puzzle.isComplete) _buildRopeEnd(width, height),
+                  if (puzzle.isInProgress)
+                    _buildRopeEnd(width, height),
                 ],
               ),
             ),
@@ -273,29 +295,24 @@ class _KnotArena extends StatelessWidget {
     );
   }
 
-  /// The draggable working end of the rope, parked at the current frontier
-  /// (the anchor before anything is threaded, otherwise the last seated loop).
+  /// The draggable working end of the rope, parked on the loop the path
+  /// currently ends at.
   Widget _buildRopeEnd(double width, double height) {
-    final Offset frontier;
-    if (puzzle.progress == 0) {
-      frontier = Offset(width * 0.12, height * 0.9);
-    } else {
-      final t = puzzle.targets
-          .firstWhere((t) => t.id == puzzle.order[puzzle.progress - 1]);
-      frontier = Offset(t.position.dx * width, t.position.dy * height);
-    }
+    final end = puzzle.targets
+        .firstWhere((t) => t.id == puzzle.currentEndId)
+        .position;
+    final frontier = Offset(end.dx * width, end.dy * height);
     const knob = 28.0;
-    final handle = _RopeEndKnob(pulse: pulse);
     return Positioned(
       left: frontier.dx - knob / 2,
       top: frontier.dy - knob / 2,
       width: knob,
       height: knob,
       child: Draggable<int>(
-        data: 0,
+        data: puzzle.currentEndId,
         feedback: _RopeEndKnob(pulse: pulse, dragging: true),
         childWhenDragging: const SizedBox.shrink(),
-        child: handle,
+        child: _RopeEndKnob(pulse: pulse),
       ),
     );
   }
@@ -303,40 +320,55 @@ class _KnotArena extends StatelessWidget {
   Widget _buildTarget(KnotTarget target, double width, double height) {
     final cx = target.position.dx * width;
     final cy = target.position.dy * height;
-    final threaded = puzzle.isThreaded(target.id);
-    final isNext = puzzle.isNext(target.id);
-    final isFoul = foulTargetId == target.id;
+    final isAnchor = target.id == puzzle.startId;
+    final linked = puzzle.isLinked(target.id);
+    final candidate = puzzle.isCandidate(target.id);
+    final isEnd = target.id == puzzle.currentEndId;
+
+    // Highlight the two loops involved in a foul, once failed.
+    final crossing = puzzle.crossing;
+    final fouled = puzzle.isFailed &&
+        crossing != null &&
+        (crossing.newSegment.fromId == target.id ||
+            crossing.newSegment.toId == target.id ||
+            crossing.hitSegment.fromId == target.id ||
+            crossing.hitSegment.toId == target.id);
 
     return Positioned(
-      left: cx - _targetSize / 2,
-      top: cy - _targetSize / 2,
-      width: _targetSize,
-      height: _targetSize,
+      left: cx - _targetSlot / 2,
+      top: cy - _targetSlot / 2,
+      width: _targetSlot,
+      height: _targetSlot,
       child: DragTarget<int>(
-        onAcceptWithDetails: (_) => onThread(target.id),
-        builder: (context, candidate, rejected) {
-          final hovering = candidate.isNotEmpty;
+        onWillAcceptWithDetails: (_) => candidate,
+        onAcceptWithDetails: (_) => onConnect(target.id),
+        builder: (context, incoming, rejected) {
+          final hovering = incoming.isNotEmpty;
           return AnimatedBuilder(
             animation: pulse,
             builder: (context, _) {
-              final glow = isNext ? (0.4 + pulse.value * 0.6) : 0.0;
               final Color ring;
-              if (isFoul) {
+              double glow = 0;
+              if (fouled) {
                 ring = AppColors.stormRed;
-              } else if (threaded) {
+                glow = 0.7;
+              } else if (candidate) {
+                // Anchor-to-close glows seafoam; open loops glow teal. Every
+                // open loop is fair game, so they all carry a soft steady pull.
+                ring = isAnchor ? AppColors.seafoam : AppColors.teal;
+                glow = (hovering ? 0.9 : 0.3) + pulse.value * 0.3;
+              } else if (linked) {
                 ring = AppColors.seafoam;
-              } else if (isNext) {
-                ring = AppColors.teal;
               } else {
                 ring = AppColors.glassBorder;
               }
               return _TargetLoop(
                 ring: ring,
-                filled: threaded,
+                linked: linked && !isAnchor,
+                isAnchor: isAnchor,
+                isEnd: isEnd,
                 hovering: hovering,
                 glow: glow,
-                ordinal: puzzle.order.indexOf(target.id) + 1,
-                showOrdinal: isNext || hovering,
               );
             },
           );
@@ -349,22 +381,23 @@ class _KnotArena extends StatelessWidget {
 class _TargetLoop extends StatelessWidget {
   const _TargetLoop({
     required this.ring,
-    required this.filled,
+    required this.linked,
+    required this.isAnchor,
+    required this.isEnd,
     required this.hovering,
     required this.glow,
-    required this.ordinal,
-    required this.showOrdinal,
   });
 
   final Color ring;
-  final bool filled;
+  final bool linked;
+  final bool isAnchor;
+  final bool isEnd;
   final bool hovering;
   final double glow;
-  final int ordinal;
-  final bool showOrdinal;
 
   @override
   Widget build(BuildContext context) {
+    final filled = linked || (isAnchor && isEnd);
     return Center(
       child: Container(
         width: hovering ? 48 : 40,
@@ -384,21 +417,24 @@ class _TargetLoop extends StatelessWidget {
                 ]
               : null,
         ),
-        child: filled
-            ? const Icon(Icons.check, size: 18, color: AppColors.seafoam)
-            : showOrdinal
-                ? Text(
-                    '$ordinal',
-                    style: AppTextStyles.badge.copyWith(color: ring),
-                  )
-                : const SizedBox.shrink(),
+        child: _loopIcon(),
       ),
     );
+  }
+
+  Widget _loopIcon() {
+    if (isAnchor) {
+      return Icon(Icons.anchor, size: 18, color: ring);
+    }
+    if (linked) {
+      return const Icon(Icons.check, size: 18, color: AppColors.seafoam);
+    }
+    return const SizedBox.shrink();
   }
 }
 
 /// The draggable working end of the rope — a glowing seafoam knob the player
-/// drags onto the next lit loop.
+/// drags onto the next loop.
 class _RopeEndKnob extends StatelessWidget {
   const _RopeEndKnob({required this.pulse, this.dragging = false});
 
@@ -437,55 +473,91 @@ class _RopeEndKnob extends StatelessWidget {
   }
 }
 
-/// Paints the rope from a fixed anchor through each already-threaded loop.
+/// Paints the rope along the loops in the order the player linked them, plus —
+/// on a foul — the crossing pair in flashing red.
 class _RopePainter extends CustomPainter {
-  _RopePainter({required this.puzzle, required this.size});
+  _RopePainter({
+    required this.puzzle,
+    required this.size,
+    required this.flash,
+  });
 
   final KnotPuzzle puzzle;
   final Size size;
+  final double flash;
 
-  Offset get _anchor => Offset(size.width * 0.12, size.height * 0.9);
-
-  Offset _targetCenter(int id) {
+  Offset _center(int id) {
     final t = puzzle.targets.firstWhere((t) => t.id == id);
     return Offset(t.position.dx * size.width, t.position.dy * size.height);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = Path()..moveTo(_anchor.dx, _anchor.dy);
-    for (var i = 0; i < puzzle.progress; i++) {
-      final c = _targetCenter(puzzle.order[i]);
-      path.lineTo(c.dx, c.dy);
+    final path = puzzle.path;
+    final fouled = puzzle.isFailed;
+
+    // The clean rope run so far.
+    if (path.length >= 2) {
+      final line = Path()..moveTo(_center(path.first).dx, _center(path.first).dy);
+      for (var i = 1; i < path.length; i++) {
+        final c = _center(path[i]);
+        line.lineTo(c.dx, c.dy);
+      }
+      canvas.drawPath(
+        line,
+        Paint()
+          ..color = fouled
+              ? Color.lerp(AppColors.sand, AppColors.stormRed, flash * 0.6)!
+              : AppColors.sand
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
     }
 
-    final rope = Paint()
-      ..color = AppColors.sand
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(path, rope);
+    // On a foul, overlay the two offending segments in bright flashing red.
+    final crossing = puzzle.crossing;
+    if (fouled && crossing != null) {
+      final red = Paint()
+        ..color = AppColors.stormRed.withValues(alpha: 0.5 + flash * 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..strokeCap = StrokeCap.round;
+      for (final seg in [crossing.hitSegment, crossing.newSegment]) {
+        canvas.drawLine(_center(seg.fromId), _center(seg.toId), red);
+      }
+    }
 
-    // Anchor cleat. The draggable working-end knob is a real widget overlaid on
-    // top of this painter (see [_RopeEndKnob]).
+    // The anchor cleat.
     canvas.drawCircle(
-      _anchor,
+      _center(puzzle.startId),
       7,
-      Paint()..color = AppColors.sand,
+      Paint()..color = fouled ? AppColors.stormRed : AppColors.sand,
     );
   }
 
   @override
   bool shouldRepaint(_RopePainter old) =>
-      old.puzzle.progress != puzzle.progress || old.size != size;
+      old.puzzle != puzzle ||
+      old.puzzle.path.length != puzzle.path.length ||
+      old.flash != flash ||
+      old.size != size;
 }
 
 class _KnotHint extends StatelessWidget {
-  const _KnotHint();
+  const _KnotHint({required this.puzzle});
+
+  final KnotPuzzle puzzle;
 
   @override
   Widget build(BuildContext context) {
+    final closing = puzzle.canClose;
+    final text = closing
+        ? 'Every loop is linked. Drag the rope end back onto the anchor to '
+            'close the knot — mind the lines already run.'
+        : 'Drag the glowing rope end onto any open loop; the order is yours. '
+            'Just keep each new pass from crossing a line already run.';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -495,12 +567,12 @@ class _KnotHint extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.swipe, size: 20, color: AppColors.teal),
+          Icon(closing ? Icons.anchor : Icons.swipe,
+              size: 20, color: AppColors.teal),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Drag the glowing rope end onto the numbered loop that is lit '
-              'next. Breathe slow — the rope follows your hand.',
+              text,
               style: AppTextStyles.caption.copyWith(color: AppColors.cream),
             ),
           ),
@@ -537,7 +609,49 @@ class _KnotSecuredBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'A fair, true bowline. Cast off and tie another.',
+                  'A clean, non-crossing loop through every point. '
+                  'Cast off and tie another.',
+                  style:
+                      AppTextStyles.caption.copyWith(color: AppColors.cream),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KnotFouledBanner extends StatelessWidget {
+  const _KnotFouledBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.stormRed.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+        border: Border.all(color: AppColors.stormRed.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 22, color: AppColors.stormRed),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Lines fouled',
+                  style: AppTextStyles.cardTitleSmall
+                      .copyWith(color: AppColors.stormRed),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'That pass crossed a line already run. Shake it out and '
+                  'try a fresh lay.',
                   style:
                       AppTextStyles.caption.copyWith(color: AppColors.cream),
                 ),
@@ -551,15 +665,28 @@ class _KnotSecuredBanner extends StatelessWidget {
 }
 
 class _NewRoundButton extends StatelessWidget {
-  const _NewRoundButton({required this.complete, required this.onTap});
+  const _NewRoundButton({required this.phase, required this.onTap});
 
-  final bool complete;
+  final KnotPhase phase;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = complete ? AppColors.seafoam : AppColors.glassFill;
-    final fg = complete ? AppColors.onAccent : AppColors.white;
+    final String label;
+    final Color color;
+    switch (phase) {
+      case KnotPhase.success:
+        label = 'Tie Another Knot';
+        color = AppColors.seafoam;
+      case KnotPhase.failed:
+        label = 'Try Again';
+        color = AppColors.seafoam;
+      case KnotPhase.inProgress:
+        label = 'New Layout';
+        color = AppColors.glassFill;
+    }
+    final accented = phase != KnotPhase.inProgress;
+    final fg = accented ? AppColors.onAccent : AppColors.white;
     return SizedBox(
       width: double.infinity,
       child: Material(
@@ -572,9 +699,8 @@ class _NewRoundButton extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-              border: complete
-                  ? null
-                  : Border.all(color: AppColors.glassBorder),
+              border:
+                  accented ? null : Border.all(color: AppColors.glassBorder),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -587,7 +713,7 @@ class _NewRoundButton extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  complete ? 'Tie Another Knot' : 'Reset Rope',
+                  label,
                   style: AppTextStyles.buttonLarge.copyWith(color: fg),
                 ),
               ],

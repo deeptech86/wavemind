@@ -8,58 +8,283 @@ import 'package:tidewell_app/data/games/sextant_balance.dart';
 
 void main() {
   // ---------------------------------------------------------------------------
-  // Knot Master 3D — threading-sequence correctness.
+  // Knot Master 3D — "close the loop without crossing" geometry + state machine.
   // ---------------------------------------------------------------------------
-  group('KnotPuzzle', () {
-    test('shuffled produces a valid, complete, non-repeating order', () {
-      final puzzle = KnotPuzzle.shuffled(random: Random(1));
-      expect(puzzle.order.length, puzzle.targets.length);
-      expect(puzzle.order.toSet().length, puzzle.order.length);
-      for (final id in puzzle.order) {
-        expect(puzzle.targets.any((t) => t.id == id), isTrue);
-      }
-      expect(puzzle.progress, 0);
-      expect(puzzle.isComplete, isFalse);
-    });
 
-    test('a correct target advances progress', () {
-      final puzzle = KnotPuzzle.shuffled(random: Random(2));
-      final first = puzzle.order.first;
-      expect(puzzle.registerTarget(first), KnotStepResult.correct);
-      expect(puzzle.progress, 1);
-      expect(puzzle.isThreaded(first), isTrue);
-    });
+  /// A unit square plus centre — handy fixed layout for state-machine tests.
+  /// Pivot (lowest y, tie-break lowest x) is id 0 at (0,0).
+  List<KnotTarget> squareWithCentre() => const [
+        KnotTarget(id: 0, position: Offset(0, 0)),
+        KnotTarget(id: 1, position: Offset(1, 0)),
+        KnotTarget(id: 2, position: Offset(1, 1)),
+        KnotTarget(id: 3, position: Offset(0, 1)),
+        KnotTarget(id: 4, position: Offset(0.5, 0.5)),
+      ];
 
-    test('a wrong target is a foul move that does not advance', () {
-      final puzzle = KnotPuzzle.shuffled(random: Random(3));
-      final wrong = puzzle.order.last; // not the first step
-      expect(puzzle.registerTarget(wrong), KnotStepResult.wrong);
-      expect(puzzle.progress, 0);
-      expect(puzzle.isThreaded(wrong), isFalse);
-    });
-
-    test('threading the full order in sequence completes the knot', () {
-      final puzzle = KnotPuzzle.shuffled(random: Random(4));
-      final order = List<int>.of(puzzle.order);
-      for (var i = 0; i < order.length; i++) {
-        final result = puzzle.registerTarget(order[i]);
-        if (i == order.length - 1) {
-          expect(result, KnotStepResult.completed);
-        } else {
-          expect(result, KnotStepResult.correct);
+  /// True iff the closed cycle [order] (loop-id order, closing back to the
+  /// first) has any pair of non-adjacent segments that properly cross.
+  bool cycleHasCrossing(List<KnotTarget> targets, List<int> order) {
+    Offset pos(int id) => targets.firstWhere((t) => t.id == id).position;
+    final n = order.length;
+    for (var i = 0; i < n; i++) {
+      final a1 = order[i];
+      final a2 = order[(i + 1) % n];
+      for (var j = i + 1; j < n; j++) {
+        final b1 = order[j];
+        final b2 = order[(j + 1) % n];
+        // Skip adjacent segments (those sharing a loop).
+        if (a1 == b1 || a1 == b2 || a2 == b1 || a2 == b2) continue;
+        if (KnotPuzzle.segmentsCross(pos(a1), pos(a2), pos(b1), pos(b2))) {
+          return true;
         }
       }
-      expect(puzzle.isComplete, isTrue);
-      expect(puzzle.fraction, 1.0);
-      expect(puzzle.nextTargetId, isNull);
+    }
+    return false;
+  }
+
+  group('KnotPuzzle.segmentsCross', () {
+    test('an X of crossing diagonals is a crossing', () {
+      expect(
+        KnotPuzzle.segmentsCross(
+          const Offset(0, 0),
+          const Offset(1, 1),
+          const Offset(0, 1),
+          const Offset(1, 0),
+        ),
+        isTrue,
+      );
     });
 
-    test('reset restores a fresh round with the same layout', () {
-      final puzzle = KnotPuzzle.shuffled(random: Random(5));
-      puzzle.registerTarget(puzzle.order.first);
-      puzzle.reset();
-      expect(puzzle.progress, 0);
-      expect(puzzle.isComplete, isFalse);
+    test('parallel segments never cross', () {
+      expect(
+        KnotPuzzle.segmentsCross(
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(0, 1),
+          const Offset(1, 1),
+        ),
+        isFalse,
+      );
+    });
+
+    test('segments meeting only at a shared endpoint do not cross', () {
+      // Adjacent path segments share a loop; that touch must not count.
+      expect(
+        KnotPuzzle.segmentsCross(
+          const Offset(0, 0),
+          const Offset(1, 1),
+          const Offset(1, 1),
+          const Offset(2, 0),
+        ),
+        isFalse,
+      );
+    });
+
+    test('a T-junction (endpoint touching mid-segment) is not a proper cross',
+        () {
+      expect(
+        KnotPuzzle.segmentsCross(
+          const Offset(0, 0),
+          const Offset(2, 0),
+          const Offset(1, 0),
+          const Offset(1, 1),
+        ),
+        isFalse,
+      );
+    });
+
+    test('disjoint, far-apart segments do not cross', () {
+      expect(
+        KnotPuzzle.segmentsCross(
+          const Offset(0, 0),
+          const Offset(0, 1),
+          const Offset(5, 5),
+          const Offset(6, 6),
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('KnotPuzzle layout generation', () {
+    test('random layouts place the requested number of spaced loops', () {
+      for (var seed = 0; seed < 20; seed++) {
+        final puzzle = KnotPuzzle.random(random: Random(seed), loopCount: 5);
+        expect(puzzle.targets, hasLength(5));
+        expect(puzzle.targets.map((t) => t.id).toSet(), hasLength(5));
+        // Every loop sits strictly inside the arena bounds.
+        for (final t in puzzle.targets) {
+          expect(t.position.dx, inInclusiveRange(0.0, 1.0));
+          expect(t.position.dy, inInclusiveRange(0.0, 1.0));
+        }
+      }
+    });
+
+    test('the pivot/polar-angle solution is never self-crossing', () {
+      // The solvability guarantee: for any generated layout, the star-shaped
+      // cycle the generator relies on admits a clean, non-crossing closed loop.
+      for (var seed = 0; seed < 200; seed++) {
+        final puzzle = KnotPuzzle.random(random: Random(seed), loopCount: 5);
+        final cycle = KnotPuzzle.solutionCycle(puzzle.targets);
+        expect(cycle, hasLength(puzzle.targets.length));
+        expect(
+          cycleHasCrossing(puzzle.targets, cycle),
+          isFalse,
+          reason: 'seed $seed produced a self-crossing solution',
+        );
+      }
+    });
+
+    test('the anchor is the solution pivot (its first loop)', () {
+      for (var seed = 0; seed < 20; seed++) {
+        final puzzle = KnotPuzzle.random(random: Random(seed));
+        expect(puzzle.startId, KnotPuzzle.solutionCycle(puzzle.targets).first);
+      }
+    });
+  });
+
+  group('KnotPuzzle state machine', () {
+    test('a fresh round starts seated on the anchor, in progress', () {
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      expect(puzzle.phase, KnotPhase.inProgress);
+      expect(puzzle.startId, 0);
+      expect(puzzle.currentEndId, 0);
+      expect(puzzle.path, [0]);
+      expect(puzzle.segmentsDrawn, 0);
+      expect(puzzle.isLinked(0), isTrue);
+    });
+
+    test('every un-linked loop is a candidate (free order)', () {
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      expect(puzzle.isCandidate(0), isFalse); // the current end
+      for (final id in [1, 2, 3, 4]) {
+        expect(puzzle.isCandidate(id), isTrue);
+      }
+    });
+
+    test('a clean connection extends the path and keeps it in progress', () {
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      expect(puzzle.connect(1), KnotStepResult.connected);
+      expect(puzzle.path, [0, 1]);
+      expect(puzzle.currentEndId, 1);
+      expect(puzzle.segmentsDrawn, 1);
+      expect(puzzle.isLinked(1), isTrue);
+      expect(puzzle.phase, KnotPhase.inProgress);
+    });
+
+    test('re-linking a connected loop is rejected (no state change)', () {
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      puzzle.connect(1);
+      expect(puzzle.connect(1), KnotStepResult.rejected);
+      expect(puzzle.connect(0), KnotStepResult.rejected); // anchor, not yet
+      expect(puzzle.path, [0, 1]);
+    });
+
+    test('a crossing pass fouls the knot and records the collision', () {
+      // Perimeter order 0->1->2->3 is clean; jumping 3->... we instead force a
+      // cross: 0->2 (diagonal), then 1 so 2->1 is fine, then 3 so 1->3 crosses
+      // the 0->2 diagonal. Build it directly:
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      expect(puzzle.connect(2), KnotStepResult.connected); // 0->2 diagonal
+      expect(puzzle.connect(1), KnotStepResult.connected); // 2->1
+      // 1->3 crosses the 0->2 diagonal.
+      expect(puzzle.connect(3), KnotStepResult.overlap);
+      expect(puzzle.phase, KnotPhase.failed);
+      expect(puzzle.isFailed, isTrue);
+      final crossing = puzzle.crossing;
+      expect(crossing, isNotNull);
+      expect(crossing!.newSegment, const KnotSegment(1, 3));
+      expect(crossing.hitSegment, const KnotSegment(0, 2));
+      // Fouled rounds reject further moves.
+      expect(puzzle.connect(4), KnotStepResult.rejected);
+    });
+
+    test('an adjacent segment sharing the current end never false-fouls', () {
+      // Linking straight along the perimeter: each new pass shares the end
+      // loop with the previous one but must not register as a crossing.
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      expect(puzzle.connect(1), KnotStepResult.connected);
+      expect(puzzle.connect(2), KnotStepResult.connected);
+      expect(puzzle.connect(3), KnotStepResult.connected);
+      expect(puzzle.phase, KnotPhase.inProgress);
+    });
+
+    test('closing is only offered once every loop is linked', () {
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      puzzle.connect(1);
+      puzzle.connect(2);
+      puzzle.connect(3);
+      expect(puzzle.canClose, isFalse); // loop 4 still open
+      expect(puzzle.isCandidate(0), isFalse);
+      expect(puzzle.connect(4), KnotStepResult.connected);
+      expect(puzzle.canClose, isTrue);
+      expect(puzzle.allLinked, isTrue);
+      // Now the only candidate is the anchor.
+      expect(puzzle.isCandidate(0), isTrue);
+      for (final id in [1, 2, 3]) {
+        expect(puzzle.isCandidate(id), isFalse);
+      }
+    });
+
+    test('a clean closed loop through every point secures the knot', () {
+      final puzzle = KnotPuzzle.fromTargets(squareWithCentre());
+      // Perimeter then centre, ordered so the closing pass stays clean:
+      // 0->1->2->3 around the square, 3->4 to the centre, 4->0 closes.
+      expect(puzzle.connect(1), KnotStepResult.connected);
+      expect(puzzle.connect(2), KnotStepResult.connected);
+      expect(puzzle.connect(3), KnotStepResult.connected);
+      expect(puzzle.connect(4), KnotStepResult.connected);
+      expect(puzzle.connect(0), KnotStepResult.closed);
+      expect(puzzle.phase, KnotPhase.success);
+      expect(puzzle.isSuccess, isTrue);
+      expect(puzzle.fraction, 1.0);
+      expect(puzzle.segmentsDrawn, puzzle.totalSegments);
+      // Secured rounds reject further moves.
+      expect(puzzle.connect(1), KnotStepResult.rejected);
+    });
+
+    test('the solution cycle always plays out to success live', () {
+      // Validity is checked live, not against a precomputed answer — but the
+      // generator's own solution order must, of course, pass that live check.
+      for (var seed = 0; seed < 50; seed++) {
+        final puzzle = KnotPuzzle.random(random: Random(seed), loopCount: 5);
+        final cycle = KnotPuzzle.solutionCycle(puzzle.targets);
+        // cycle[0] == startId; play the rest, then close.
+        for (var i = 1; i < cycle.length; i++) {
+          expect(
+            puzzle.connect(cycle[i]),
+            KnotStepResult.connected,
+            reason: 'seed $seed step $i',
+          );
+        }
+        expect(puzzle.connect(puzzle.startId), KnotStepResult.closed,
+            reason: 'seed $seed close');
+        expect(puzzle.isSuccess, isTrue);
+      }
+    });
+
+    test('a closing pass that would cross fouls instead of securing', () {
+      // Four loops where the order 0->1->2->3 links cleanly but the closing
+      // pass 3->0 crosses the 1->2 segment — verifies the close itself is
+      // crossing-checked, not just the intermediate links.
+      //   0=(0,0) 1=(1,0) 2=(1/3,2/3) 3=(2/3,2/3)
+      // 3->0 runs along y=x and meets 1->2 at (0.5,0.5).
+      final targets = const [
+        KnotTarget(id: 0, position: Offset(0, 0)),
+        KnotTarget(id: 1, position: Offset(1, 0)),
+        KnotTarget(id: 2, position: Offset(1 / 3, 2 / 3)),
+        KnotTarget(id: 3, position: Offset(2 / 3, 2 / 3)),
+      ];
+      final puzzle = KnotPuzzle.fromTargets(targets, startId: 0);
+      expect(puzzle.connect(1), KnotStepResult.connected); // 0->1
+      expect(puzzle.connect(2), KnotStepResult.connected); // 1->2
+      expect(puzzle.connect(3), KnotStepResult.connected); // 2->3
+      expect(puzzle.canClose, isTrue);
+      // Closing 3->0 crosses the earlier 1->2 segment.
+      expect(puzzle.connect(0), KnotStepResult.overlap);
+      expect(puzzle.isFailed, isTrue);
+      expect(puzzle.crossing!.newSegment, const KnotSegment(3, 0));
+      expect(puzzle.crossing!.hitSegment, const KnotSegment(1, 2));
     });
   });
 

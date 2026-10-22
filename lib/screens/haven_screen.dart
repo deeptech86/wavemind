@@ -45,6 +45,12 @@ class _HavenScreenState extends State<HavenScreen> {
     _ambientPlayer.playingStream.listen((playing) {
       if (mounted) setState(() => _ambientPlaying = playing);
     });
+    // Ease into Haven with a calm ambient bed already playing. Placeholder
+    // track for now — swap AppAssets.audioRollingDeepSea for a dedicated
+    // "calm" bed once one is supplied.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _toggleSound(0);
+    });
   }
 
   @override
@@ -68,6 +74,33 @@ class _HavenScreenState extends State<HavenScreen> {
     } catch (_) {
       // No audio hardware (tests / unsupported): keep the visual selection.
     }
+  }
+
+  /// Today's rotating pair of sleep-lore stories: the first renders as the
+  /// featured card, any remaining as compact list rows. See [dailyLore].
+  List<Widget> _buildTodaysLore(BuildContext context) {
+    final todays = dailyLore(DateTime.now(), SeaStories.all);
+    if (todays.isEmpty) return const [];
+    final widgets = <Widget>[
+      _FeaturedLore(
+        title: todays.first.title,
+        subtitle: todays.first.teaserSubtitle,
+        badge: "Tonight's Pick",
+        onTap: () => _openStory(todays.first),
+      ),
+    ];
+    for (final story in todays.skip(1)) {
+      widgets
+        ..add(const SizedBox(height: 12))
+        ..add(
+          _LoreItem(
+            title: story.title,
+            subtitle: story.teaserSubtitle,
+            onTap: () => _openStory(story),
+          ),
+        );
+    }
+    return widgets;
   }
 
   Future<void> _openStory(StoryData story) async {
@@ -124,23 +157,7 @@ class _HavenScreenState extends State<HavenScreen> {
                         trailing: '350MB Cached',
                       ),
                       const SizedBox(height: 12),
-                      _FeaturedLore(
-                        onTap: () => _openStory(SeaStories.lighthouse),
-                      ),
-                      const SizedBox(height: 12),
-                      _LoreItem(
-                        title: 'Stars Over the Pacific',
-                        subtitle:
-                            'Polynesian wayfinding & quiet tide drift • 18 min',
-                        onTap: () => _openStory(SeaStories.starsOverPacific),
-                      ),
-                      const SizedBox(height: 12),
-                      _LoreItem(
-                        title: "St. Elmo's Light",
-                        subtitle:
-                            'Folkloric lullaby for restless anchor watch • 15 min',
-                        onTap: () => _openStory(SeaStories.stElmosLight),
-                      ),
+                      ..._buildTodaysLore(context),
                       const SizedBox(height: 24),
                       const _SectionHeader(
                         title: 'Ambient Cabin Soundscapes',
@@ -637,8 +654,16 @@ class _DrillCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _FeaturedLore extends StatelessWidget {
-  const _FeaturedLore({required this.onTap});
+  const _FeaturedLore({
+    required this.title,
+    required this.subtitle,
+    required this.badge,
+    required this.onTap,
+  });
 
+  final String title;
+  final String subtitle;
+  final String badge;
   final VoidCallback onTap;
 
   @override
@@ -671,7 +696,7 @@ class _FeaturedLore extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        'Off-Watch Favorite',
+                        badge,
                         style: AppTextStyles.badge.copyWith(
                           color: AppColors.sand,
                         ),
@@ -679,12 +704,14 @@ class _FeaturedLore extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'The Lighthouse at Cape Horn',
+                      title,
                       style: AppTextStyles.cardTitleSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Narrated by Capt. Torben Lind • 22 min',
+                      subtitle,
                       style: AppTextStyles.caption,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

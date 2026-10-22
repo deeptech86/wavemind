@@ -36,6 +36,7 @@ class StoryData {
     required this.progress,
     this.tuningNote = '432Hz Tuning Active',
     this.audioAsset = AppAssets.audioLighthouseChapter,
+    required this.teaserSubtitle,
   });
 
   final String title;
@@ -53,6 +54,11 @@ class StoryData {
   final String remainingTime; // e.g. "-13:18"
   final double progress; // 0..1 of the current chapter
   final String tuningNote;
+
+  /// Short blurb shown in Haven's "Sleep Lore & Horizon Tales" teaser list —
+  /// independent of the in-player copy so each story reads well as a one-line
+  /// pitch (narrator credit for some, theme description for others).
+  final String teaserSubtitle;
 
   /// Bundled narration track for this story. Stage 2 ships a single spoken-word
   /// placeholder (the Lighthouse chapter) that every story currently reuses;
@@ -99,6 +105,7 @@ abstract final class SeaStories {
     currentTime: '08:42',
     remainingTime: '-13:18',
     progress: 0.4,
+    teaserSubtitle: 'Narrated by Capt. Torben Lind • 22 min',
   );
 
   static const StoryData starsOverPacific = StoryData(
@@ -122,6 +129,7 @@ abstract final class SeaStories {
     currentTime: '00:00',
     remainingTime: '-18:00',
     progress: 0.0,
+    teaserSubtitle: 'Polynesian wayfinding & quiet tide drift • 18 min',
   );
 
   static const StoryData stElmosLight = StoryData(
@@ -145,7 +153,30 @@ abstract final class SeaStories {
     currentTime: '00:00',
     remainingTime: '-15:00',
     progress: 0.0,
+    teaserSubtitle: 'Folkloric lullaby for restless anchor watch • 15 min',
   );
+
+  /// Every authored story, in catalog order. [dailyLore] rotates a window of
+  /// these for Haven's teaser list.
+  static const List<StoryData> all = [lighthouse, starsOverPacific, stElmosLight];
+}
+
+/// Picks a deterministic, date-driven rotation of [count] stories from
+/// [catalog] — no persistence or backend needed. The same local calendar day
+/// always yields the same set (so it's stable across app restarts/navigation
+/// within a day), and the window advances by one story per day, wrapping
+/// around so every story gets fair rotation over time.
+List<StoryData> dailyLore(
+  DateTime date,
+  List<StoryData> catalog, {
+  int count = 2,
+}) {
+  if (catalog.isEmpty) return const [];
+  final localMidnight = DateTime(date.year, date.month, date.day);
+  final dayIndex = localMidnight.millisecondsSinceEpoch ~/ 86400000;
+  final start = dayIndex % catalog.length;
+  final n = count < catalog.length ? count : catalog.length;
+  return List.generate(n, (i) => catalog[(start + i) % catalog.length]);
 }
 
 /// Story playback session (Stitch "story_lighthouse_cape_horn" redesign).
