@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../core/app_assets.dart';
+import '../data/models/catalog_models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -37,6 +38,9 @@ class StoryData {
     this.tuningNote = '432Hz Tuning Active',
     this.audioAsset = AppAssets.audioLighthouseChapter,
     required this.teaserSubtitle,
+    this.storyId,
+    this.remoteMediaUrl,
+    this.localAudioFile,
   });
 
   final String title;
@@ -60,10 +64,49 @@ class StoryData {
   /// pitch (narrator credit for some, theme description for others).
   final String teaserSubtitle;
 
-  /// Bundled narration track for this story. Stage 2 ships a single spoken-word
-  /// placeholder (the Lighthouse chapter) that every story currently reuses;
-  /// swap per-story paths here when real narration lands.
+  /// Bundled narration track for this story — the permanent offline fallback.
+  /// Stage 2 ships a single spoken-word placeholder (the Lighthouse chapter)
+  /// that every story currently reuses; swap per-story paths here when real
+  /// narration lands. Used whenever [localAudioFile] is null.
   final String audioAsset;
+
+  /// Catalog story id (server-driven stories only); null for bundled stories.
+  final String? storyId;
+
+  /// Server media URL to download lazily (`/media/...`); null for bundled.
+  final String? remoteMediaUrl;
+
+  /// Absolute path to a downloaded narration file. When set, playback uses it
+  /// (via `setFilePath`) instead of the bundled [audioAsset].
+  final String? localAudioFile;
+
+  /// True when this story is backed by downloadable server media.
+  bool get hasRemoteMedia =>
+      (storyId != null && storyId!.isNotEmpty) &&
+      (remoteMediaUrl != null && remoteMediaUrl!.isNotEmpty);
+
+  StoryData copyWith({String? localAudioFile}) => StoryData(
+    title: title,
+    series: series,
+    narrator: narrator,
+    coordinates: coordinates,
+    swellNote: swellNote,
+    vibeTags: vibeTags,
+    chapterProgress: chapterProgress,
+    chapterNumber: chapterNumber,
+    chapterTitle: chapterTitle,
+    chapterTimestamp: chapterTimestamp,
+    excerpt: excerpt,
+    currentTime: currentTime,
+    remainingTime: remainingTime,
+    progress: progress,
+    tuningNote: tuningNote,
+    audioAsset: audioAsset,
+    teaserSubtitle: teaserSubtitle,
+    storyId: storyId,
+    remoteMediaUrl: remoteMediaUrl,
+    localAudioFile: localAudioFile ?? this.localAudioFile,
+  );
 }
 
 /// A labelled mood/voice chip shown beneath the story title.
@@ -179,6 +222,119 @@ List<StoryData> dailyLore(
   return List.generate(n, (i) => catalog[(start + i) % catalog.length]);
 }
 
+/// Chooses which stories to surface in Haven's lore list. [dailyLore] is used
+/// only as a tie-breaker: if the (server-driven or bundled) [source] holds more
+/// than two active stories it rotates a deterministic daily window of two;
+/// otherwise every active story is shown directly, in order.
+List<StoryData> loreForDisplay(List<StoryData> source, DateTime date) {
+  if (source.length > 2) return dailyLore(date, source);
+  return source;
+}
+
+/// Client-authored presentation for a story, keyed by catalog id. The server
+/// owns media + title + core teaser copy + the active flag; the richer vibe
+/// chips / chapter framing stay here so new server stories still render in the
+/// full player (unknown ids fall back to [_defaultDecoration]).
+class _StoryDecoration {
+  const _StoryDecoration({
+    required this.vibeTags,
+    required this.chapterProgress,
+    required this.chapterNumber,
+    required this.chapterTitle,
+    required this.chapterTimestamp,
+  });
+
+  final List<StoryVibe> vibeTags;
+  final String chapterProgress;
+  final int chapterNumber;
+  final String chapterTitle;
+  final String chapterTimestamp;
+
+  // Constant for every story today (only one narration placeholder ships).
+  // Promote to constructor params when per-story values are needed.
+  final String tuningNote = '432Hz Tuning Active';
+
+  /// Bundled narration used as the offline fallback for this story id.
+  final String bundledAsset = AppAssets.audioLighthouseChapter;
+}
+
+const _StoryDecoration _defaultDecoration = _StoryDecoration(
+  vibeTags: [
+    StoryVibe(Icons.nightlight_round, 'Deep Sleep', AppColors.seafoam),
+    StoryVibe(Icons.headphones, 'Binaural Ocean Waves', AppColors.teal),
+  ],
+  chapterProgress: 'Chapter 1',
+  chapterNumber: 1,
+  chapterTitle: 'Horizon Tale',
+  chapterTimestamp: '00:00 — End',
+);
+
+const Map<String, _StoryDecoration> _storyDecorations = {
+  'lighthouse': _StoryDecoration(
+    vibeTags: [
+      StoryVibe(Icons.nightlight_round, 'Deep Sleep', AppColors.seafoam),
+      StoryVibe(Icons.mic_none, 'Warm Baritone', AppColors.sand),
+      StoryVibe(Icons.headphones, 'Binaural Ocean Waves', AppColors.teal),
+    ],
+    chapterProgress: 'Chapter 2 of 4',
+    chapterNumber: 2,
+    chapterTitle: "The Keeper's Lantern",
+    chapterTimestamp: '08:42 — 22:00',
+  ),
+  'stars_over_pacific': _StoryDecoration(
+    vibeTags: [
+      StoryVibe(Icons.nightlight_round, 'Deep Sleep', AppColors.seafoam),
+      StoryVibe(Icons.headphones, 'Soft Tide Drift', AppColors.teal),
+    ],
+    chapterProgress: 'Chapter 1 of 3',
+    chapterNumber: 1,
+    chapterTitle: 'Reading the Swell',
+    chapterTimestamp: '00:00 — 18:00',
+  ),
+  'st_elmos_light': _StoryDecoration(
+    vibeTags: [
+      StoryVibe(Icons.nightlight_round, 'Restless Watch', AppColors.seafoam),
+      StoryVibe(Icons.mic_none, 'Soft Lullaby', AppColors.sand),
+    ],
+    chapterProgress: 'Chapter 1 of 2',
+    chapterNumber: 1,
+    chapterTitle: 'A Glow on the Mast',
+    chapterTimestamp: '00:00 — 15:00',
+  ),
+};
+
+/// Builds a playable [StoryData] from a server [CatalogStory], merging the
+/// server-driven fields with the client-authored decoration for its id. The
+/// bundled asset is carried as [StoryData.audioAsset] (offline fallback); the
+/// downloadable file is resolved lazily on play.
+StoryData storyDataFromCatalog(CatalogStory story) {
+  final deco = _storyDecorations[story.id] ?? _defaultDecoration;
+  final excerpt = story.excerpt.isNotEmpty
+      ? story.excerpt
+      : const ['A quiet tale for the night watch.'];
+  return StoryData(
+    title: story.title,
+    series: story.series,
+    narrator: story.narrator,
+    coordinates: story.coordinates,
+    swellNote: story.swellNote,
+    vibeTags: deco.vibeTags,
+    chapterProgress: deco.chapterProgress,
+    chapterNumber: deco.chapterNumber,
+    chapterTitle: deco.chapterTitle,
+    chapterTimestamp: deco.chapterTimestamp,
+    excerpt: excerpt,
+    currentTime: '00:00',
+    remainingTime: '-${story.durationLabel}',
+    progress: 0.0,
+    tuningNote: deco.tuningNote,
+    audioAsset: deco.bundledAsset,
+    teaserSubtitle: story.teaserSubtitle,
+    storyId: story.id,
+    remoteMediaUrl: story.mediaUrl,
+  );
+}
+
 /// Story playback session (Stitch "story_lighthouse_cape_horn" redesign).
 ///
 /// Stage 2: the transport controls (play/pause, ±skip), the waveform/scrubber
@@ -243,7 +399,14 @@ class _StoryPlaybackScreenState extends State<StoryPlaybackScreen> {
       }
     });
     try {
-      await _player.setAsset(_story.audioAsset);
+      // Prefer a lazily-downloaded catalog file; fall back to the bundled
+      // asset whenever no local file is available (offline / not yet fetched).
+      final local = _story.localAudioFile;
+      if (local != null && local.isNotEmpty) {
+        await _player.setFilePath(local);
+      } else {
+        await _player.setAsset(_story.audioAsset);
+      }
       await _player.setSpeed(_speedValues[_speedIndex]);
       await _player.play();
     } catch (_) {

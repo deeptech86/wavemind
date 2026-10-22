@@ -46,6 +46,10 @@ dependencies:
   sqflite: ^2.4.1
   path: ^1.9.0
 
+  # Stage 5 — on-device media cache for the rotating content catalog
+  # (lazily-downloaded story / soundscape audio stored in app-local storage).
+  path_provider: ^2.1.4
+
   # Stage 4 — tiny remote profile backend (name/email/phone only).
   http: ^1.2.2
 

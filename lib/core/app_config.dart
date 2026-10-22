@@ -35,4 +35,9 @@ abstract final class AppConfig {
   /// screen can surface a clear error rather than hanging the UI. The rest of
   /// the app never blocks on this service.
   static const Duration requestTimeout = Duration(seconds: 8);
+
+  /// Media files can be a few MB each, so allow a more generous window than the
+  /// metadata calls. Downloads are lazy and off the UI thread; a timeout here
+  /// just means "fall back to the bundled asset for now".
+  static const Duration mediaDownloadTimeout = Duration(seconds: 30);
 }

@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../core/app_assets.dart';
+import '../data/content_catalog_repository.dart';
+import '../data/models/catalog_models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -21,23 +23,67 @@ import 'story_playback_screen.dart';
 /// with a meditative glow behind the active tile. The watch-reset drills remain
 /// presentational.
 class HavenScreen extends StatefulWidget {
-  const HavenScreen({super.key});
+  const HavenScreen({super.key, ContentCatalogRepository? catalog})
+    : _catalog = catalog;
+
+  final ContentCatalogRepository? _catalog;
 
   @override
   State<HavenScreen> createState() => _HavenScreenState();
 }
 
 class _HavenScreenState extends State<HavenScreen> {
-  /// Soundscape tile index -> looping ambient bed. Only one plays at a time.
-  static const List<String> _soundAssets = [
-    AppAssets.audioRollingDeepSea,
-    AppAssets.audioSteelHullRain,
-    AppAssets.audioFoghornBell,
-  ];
+  late final ContentCatalogRepository _catalog =
+      widget._catalog ?? ContentCatalogRepository();
 
   final AudioPlayer _ambientPlayer = AudioPlayer();
   int? _activeSound;
   bool _ambientPlaying = false;
+
+  /// Server-active content once a sync (or cache load) lands; null until then,
+  /// so the getters below fall back to the bundled 3+3 content.
+  List<CatalogStory>? _catalogStories;
+  List<CatalogSound>? _catalogSounds;
+
+  /// Bundled offline fallback soundscapes — these ship in the app and are the
+  /// permanent fallback when nothing has synced / a file isn't downloaded yet.
+  static const List<_SoundSource> _bundledSounds = [
+    _SoundSource(
+      id: 'rolling_deep_sea',
+      icon: Icons.water,
+      label: 'Rolling Deep Sea',
+      subtitle: 'Low Frequency',
+      bundledAsset: AppAssets.audioRollingDeepSea,
+    ),
+    _SoundSource(
+      id: 'steel_hull_rain',
+      icon: Icons.grain,
+      label: 'Steel Hull Rain',
+      subtitle: 'White Noise',
+      bundledAsset: AppAssets.audioSteelHullRain,
+    ),
+    _SoundSource(
+      id: 'foghorn_bell',
+      icon: Icons.notifications_active_outlined,
+      label: 'Foghorn & Bell',
+      subtitle: 'Distant Anchor',
+      bundledAsset: AppAssets.audioFoghornBell,
+    ),
+  ];
+
+  /// Soundscapes to render: server-active ones once synced, else the bundled 3.
+  List<_SoundSource> get _sounds {
+    final cat = _catalogSounds;
+    if (cat == null || cat.isEmpty) return _bundledSounds;
+    return [for (final s in cat) _SoundSource.fromCatalog(s)];
+  }
+
+  /// Stories to render: server-active ones once synced, else the bundled 3.
+  List<StoryData> get _stories {
+    final cat = _catalogStories;
+    if (cat == null || cat.isEmpty) return SeaStories.all;
+    return cat.map(storyDataFromCatalog).toList();
+  }
 
   @override
   void initState() {
@@ -45,21 +91,42 @@ class _HavenScreenState extends State<HavenScreen> {
     _ambientPlayer.playingStream.listen((playing) {
       if (mounted) setState(() => _ambientPlaying = playing);
     });
-    // Ease into Haven with a calm ambient bed already playing. Placeholder
-    // track for now — swap AppAssets.audioRollingDeepSea for a dedicated
-    // "calm" bed once one is supplied.
+    // Ease into Haven with a calm ambient bed already playing.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _toggleSound(0);
+    });
+    // Show cached/bundled content immediately, then refresh in place if a sync
+    // brings changes — never blocks the UI (see ContentCatalogRepository).
+    _loadAndSync();
+  }
+
+  Future<void> _loadAndSync() async {
+    final cached = await _catalog.loadCached();
+    if (!mounted) return;
+    if (cached.stories.isNotEmpty || cached.sounds.isNotEmpty) {
+      setState(() {
+        _catalogStories = cached.stories;
+        _catalogSounds = cached.sounds;
+      });
+    }
+    final fresh = await _catalog.sync();
+    if (!mounted || fresh == null) return;
+    setState(() {
+      _catalogStories = fresh.stories;
+      _catalogSounds = fresh.sounds;
     });
   }
 
   @override
   void dispose() {
     _ambientPlayer.dispose();
+    _catalog.dispose();
     super.dispose();
   }
 
   Future<void> _toggleSound(int index) async {
+    final sounds = _sounds;
+    if (index < 0 || index >= sounds.length) return;
     // Tapping the active tile stops it; tapping another switches the bed.
     if (_activeSound == index) {
       setState(() => _activeSound = null);
@@ -67,8 +134,22 @@ class _HavenScreenState extends State<HavenScreen> {
       return;
     }
     setState(() => _activeSound = index);
+    final source = sounds[index];
     try {
-      await _ambientPlayer.setAsset(_soundAssets[index]);
+      if (source.remoteUrl != null) {
+        final resolved = await _catalog.resolveSoundAudio(
+          id: source.id,
+          mediaUrl: source.remoteUrl!,
+          bundledAsset: source.bundledAsset,
+        );
+        if (resolved.isLocalFile) {
+          await _ambientPlayer.setFilePath(resolved.path);
+        } else {
+          await _ambientPlayer.setAsset(resolved.path);
+        }
+      } else {
+        await _ambientPlayer.setAsset(source.bundledAsset);
+      }
       await _ambientPlayer.setLoopMode(LoopMode.one);
       await _ambientPlayer.play();
     } catch (_) {
@@ -76,10 +157,12 @@ class _HavenScreenState extends State<HavenScreen> {
     }
   }
 
-  /// Today's rotating pair of sleep-lore stories: the first renders as the
-  /// featured card, any remaining as compact list rows. See [dailyLore].
+  /// Today's sleep-lore stories: the first renders as the featured card, any
+  /// remaining as compact list rows. Sourced from the catalog (or bundled
+  /// fallback); [loreForDisplay] applies [dailyLore] only as a tie-breaker when
+  /// more than two stories are active.
   List<Widget> _buildTodaysLore(BuildContext context) {
-    final todays = dailyLore(DateTime.now(), SeaStories.all);
+    final todays = loreForDisplay(_stories, DateTime.now());
     if (todays.isEmpty) return const [];
     final widgets = <Widget>[
       _FeaturedLore(
@@ -109,10 +192,23 @@ class _HavenScreenState extends State<HavenScreen> {
       setState(() => _activeSound = null);
       await _ambientPlayer.stop();
     }
+    // Lazily resolve downloadable narration on play; fall back to the bundled
+    // asset carried on the story if it can't be fetched.
+    var toPlay = story;
+    if (story.hasRemoteMedia) {
+      final resolved = await _catalog.resolveStoryAudio(
+        id: story.storyId!,
+        mediaUrl: story.remoteMediaUrl!,
+        bundledAsset: story.audioAsset,
+      );
+      if (resolved.isLocalFile) {
+        toPlay = story.copyWith(localAudioFile: resolved.path);
+      }
+    }
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StoryPlaybackScreen(story: story),
+        builder: (_) => StoryPlaybackScreen(story: toPlay),
       ),
     );
   }
@@ -165,6 +261,7 @@ class _HavenScreenState extends State<HavenScreen> {
                       ),
                       const SizedBox(height: 12),
                       _SoundscapeGrid(
+                        sounds: _sounds,
                         active: _activeSound,
                         playing: _ambientPlaying,
                         onToggle: _toggleSound,
@@ -845,33 +942,73 @@ class _LoreItem extends StatelessWidget {
 // Ambient soundscapes (visual toggle only)
 // ---------------------------------------------------------------------------
 
+/// A soundscape source: a bundled offline bed, or a server-driven one with a
+/// downloadable [remoteUrl]. [bundledAsset] is the permanent offline fallback.
+class _SoundSource {
+  const _SoundSource({
+    required this.id,
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.bundledAsset,
+    this.remoteUrl,
+  });
+
+  final String id;
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final String bundledAsset;
+  final String? remoteUrl;
+
+  /// Icons / bundled fallbacks for known catalog ids; sensible defaults for
+  /// any new server sound.
+  static _SoundSource fromCatalog(CatalogSound sound) {
+    const icons = <String, IconData>{
+      'rolling_deep_sea': Icons.water,
+      'steel_hull_rain': Icons.grain,
+      'foghorn_bell': Icons.notifications_active_outlined,
+    };
+    const bundled = <String, String>{
+      'rolling_deep_sea': AppAssets.audioRollingDeepSea,
+      'steel_hull_rain': AppAssets.audioSteelHullRain,
+      'foghorn_bell': AppAssets.audioFoghornBell,
+    };
+    return _SoundSource(
+      id: sound.id,
+      icon: icons[sound.id] ?? Icons.music_note,
+      label: sound.label,
+      subtitle: sound.subtitle,
+      bundledAsset: bundled[sound.id] ?? AppAssets.audioRollingDeepSea,
+      remoteUrl: sound.mediaUrl,
+    );
+  }
+}
+
 class _SoundscapeGrid extends StatelessWidget {
   const _SoundscapeGrid({
+    required this.sounds,
     required this.active,
     required this.playing,
     required this.onToggle,
   });
 
+  final List<_SoundSource> sounds;
   final int? active;
   final bool playing;
   final ValueChanged<int> onToggle;
 
   @override
   Widget build(BuildContext context) {
-    const tiles = [
-      (Icons.water, 'Rolling Deep Sea', 'Low Frequency'),
-      (Icons.grain, 'Steel Hull Rain', 'White Noise'),
-      (Icons.notifications_active_outlined, 'Foghorn & Bell', 'Distant Anchor'),
-    ];
     return Row(
       children: [
-        for (var i = 0; i < tiles.length; i++) ...[
+        for (var i = 0; i < sounds.length; i++) ...[
           if (i > 0) const SizedBox(width: 10),
           Expanded(
             child: _SoundTile(
-              icon: tiles[i].$1,
-              label: tiles[i].$2,
-              sub: tiles[i].$3,
+              icon: sounds[i].icon,
+              label: sounds[i].label,
+              sub: sounds[i].subtitle,
               selected: active == i,
               playing: active == i && playing,
               onTap: () => onToggle(i),

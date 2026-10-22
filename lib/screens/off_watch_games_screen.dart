@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../data/content_catalog_repository.dart';
+import '../data/models/catalog_models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -11,14 +13,154 @@ import 'knot_master_screen.dart';
 import 'mindful_game_screen.dart';
 import 'sextant_horizon_screen.dart';
 
+/// Immutable catalog entry for one of the five built-in off-watch games. The
+/// set of games is fixed in the app; the server only controls which are
+/// *featured* this week (a spotlight, never a gate — all five stay playable).
+class _GameEntry {
+  const _GameEntry({
+    required this.key,
+    required this.icon,
+    required this.accent,
+    required this.title,
+    required this.badge,
+    required this.description,
+    required this.meta,
+    required this.ready,
+  });
+
+  final String key;
+  final String icon;
+  final Color accent;
+  final String title;
+  final String badge;
+  final String description;
+  final String meta;
+  final bool ready;
+}
+
 /// "Off-Watch Mind Games" hub (Stitch "offwatch_mind_games" redesign).
 ///
-/// Stage 1: a featured focus ritual plus a catalog of tactile decompression
-/// games. Only "Calm Your Waves" (the existing [MindfulGameScreen]) is wired
-/// through and playable; the remaining catalog entries and the featured ritual
-/// are presentational and surface a "coming soon" cue when tapped.
-class OffWatchGamesScreen extends StatelessWidget {
-  const OffWatchGamesScreen({super.key});
+/// A featured focus ritual plus the catalog of five tactile decompression
+/// games. Four are wired through and playable; "Fog Signal Echo" and the
+/// featured ritual remain presentational and surface a "coming soon" cue.
+///
+/// Which games carry a "Featured this week" spotlight (and sort first) is
+/// driven by the content catalog's `featured_game` flags, synced on open.
+/// Before any sync — or offline — all five show normally in their default
+/// order. Featuring never hides a game.
+class OffWatchGamesScreen extends StatefulWidget {
+  const OffWatchGamesScreen({super.key, ContentCatalogRepository? catalog})
+    : _catalog = catalog;
+
+  final ContentCatalogRepository? _catalog;
+
+  @override
+  State<OffWatchGamesScreen> createState() => _OffWatchGamesScreenState();
+}
+
+class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
+  late final ContentCatalogRepository _catalog =
+      widget._catalog ?? ContentCatalogRepository();
+
+  /// The five built-in games in their default catalog order.
+  static const List<_GameEntry> _games = [
+    _GameEntry(
+      key: GameKeys.calmYourWaves,
+      icon: AppAssets.waves,
+      accent: AppColors.seafoam,
+      title: 'Calm Your Waves',
+      badge: 'Ready',
+      description:
+          'Match soothing ocean pairs to quiet the mind between watches.',
+      meta: '2-4m • Memory match',
+      ready: true,
+    ),
+    _GameEntry(
+      key: GameKeys.knotMaster,
+      icon: AppAssets.anchor,
+      accent: AppColors.teal,
+      title: 'Knot Master 3D',
+      badge: 'Ready',
+      description:
+          'Run the rope through every loop and close it clean — no crossing '
+          'lines — with haptic feedback.',
+      meta: 'Haptics on • 4-6m',
+      ready: true,
+    ),
+    _GameEntry(
+      key: GameKeys.fogSignalEcho,
+      icon: AppAssets.cloudFog,
+      accent: AppColors.sand,
+      title: 'Fog Signal Echo',
+      badge: 'Auditory Calm',
+      description:
+          'Sound & pitch pattern recognition imitating foghorns echoing '
+          'through dense squalls.',
+      meta: 'Binaural Low-Hz • 6m',
+      ready: false,
+    ),
+    _GameEntry(
+      key: GameKeys.sextantHorizon,
+      icon: AppAssets.compass,
+      accent: AppColors.seafoam,
+      title: 'Sextant Horizon Balance',
+      badge: 'Ready',
+      description:
+          'Gentle gyroscopic horizon leveler keeping the spirit bubble '
+          'centered against swell roll.',
+      meta: 'Gyro sensory • 3-5m',
+      ready: true,
+    ),
+    _GameEntry(
+      key: GameKeys.cabinDominoes,
+      icon: AppAssets.shell,
+      accent: AppColors.sand,
+      title: 'Cabin Dominoes',
+      badge: 'Ready',
+      description:
+          'Cozy pass-and-play dominoes to challenge an off-watch crewmate on '
+          'one device, no internet.',
+      meta: 'Pass & play • 2 crew',
+      ready: true,
+    ),
+  ];
+
+  /// Keys spotlighted this week; empty until a sync lands (default display).
+  Set<String> _featuredKeys = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAndSync();
+  }
+
+  Future<void> _loadAndSync() async {
+    final cached = await _catalog.loadCached();
+    if (!mounted) return;
+    if (cached.featuredGames.isNotEmpty) {
+      setState(() => _featuredKeys = _keysOf(cached.featuredGames));
+    }
+    final fresh = await _catalog.sync();
+    if (!mounted || fresh == null) return;
+    setState(() => _featuredKeys = _keysOf(fresh.featuredGames));
+  }
+
+  static Set<String> _keysOf(List<FeaturedGame> games) =>
+      {for (final g in games) g.gameKey};
+
+  @override
+  void dispose() {
+    _catalog.dispose();
+    super.dispose();
+  }
+
+  /// Games ordered featured-first (spotlight), preserving default order within
+  /// each group. All five are always present.
+  List<_GameEntry> get _orderedGames {
+    final featured = [for (final g in _games) if (_featuredKeys.contains(g.key)) g];
+    final rest = [for (final g in _games) if (!_featuredKeys.contains(g.key)) g];
+    return [...featured, ...rest];
+  }
 
   void _comingSoon(BuildContext context, String name) {
     ScaffoldMessenger.of(context)
@@ -35,8 +177,51 @@ class OffWatchGamesScreen extends StatelessWidget {
       );
   }
 
+  void _openGame(BuildContext context, _GameEntry game) {
+    switch (game.key) {
+      case GameKeys.calmYourWaves:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const MindfulGameScreen()),
+        );
+      case GameKeys.knotMaster:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const KnotMasterScreen()),
+        );
+      case GameKeys.sextantHorizon:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const SextantHorizonScreen()),
+        );
+      case GameKeys.cabinDominoes:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const CabinDominoesScreen()),
+        );
+      default:
+        _comingSoon(context, game.title);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final games = _orderedGames;
+    final tiles = <Widget>[];
+    for (var i = 0; i < games.length; i++) {
+      final game = games[i];
+      if (i > 0) tiles.add(const SizedBox(height: 12));
+      tiles.add(
+        _CatalogTile(
+          icon: game.icon,
+          accent: game.accent,
+          title: game.title,
+          badge: game.badge,
+          description: game.description,
+          meta: game.meta,
+          ready: game.ready,
+          featured: _featuredKeys.contains(game.key),
+          onTap: () => _openGame(context, game),
+        ),
+      );
+    }
+
     return Scaffold(
       body: DecoratedBox(
         decoration: const BoxDecoration(
@@ -81,86 +266,7 @@ class OffWatchGamesScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // The one wired, playable game.
-                      _CatalogTile(
-                        icon: AppAssets.waves,
-                        accent: AppColors.seafoam,
-                        title: 'Calm Your Waves',
-                        badge: 'Ready',
-                        description:
-                            'Match soothing ocean pairs to quiet the mind '
-                            'between watches.',
-                        meta: '2-4m • Memory match',
-                        ready: true,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const MindfulGameScreen(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _CatalogTile(
-                        icon: AppAssets.anchor,
-                        accent: AppColors.teal,
-                        title: 'Knot Master 3D',
-                        badge: 'Ready',
-                        description:
-                            'Run the rope through every loop and close it '
-                            'clean — no crossing lines — with haptic feedback.',
-                        meta: 'Haptics on • 4-6m',
-                        ready: true,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const KnotMasterScreen(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _CatalogTile(
-                        icon: AppAssets.cloudFog,
-                        accent: AppColors.sand,
-                        title: 'Fog Signal Echo',
-                        badge: 'Auditory Calm',
-                        description:
-                            'Sound & pitch pattern recognition imitating '
-                            'foghorns echoing through dense squalls.',
-                        meta: 'Binaural Low-Hz • 6m',
-                        onTap: () => _comingSoon(context, 'Fog Signal Echo'),
-                      ),
-                      const SizedBox(height: 12),
-                      _CatalogTile(
-                        icon: AppAssets.compass,
-                        accent: AppColors.seafoam,
-                        title: 'Sextant Horizon Balance',
-                        badge: 'Ready',
-                        description:
-                            'Gentle gyroscopic horizon leveler keeping the '
-                            'spirit bubble centered against swell roll.',
-                        meta: 'Gyro sensory • 3-5m',
-                        ready: true,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const SextantHorizonScreen(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _CatalogTile(
-                        icon: AppAssets.shell,
-                        accent: AppColors.sand,
-                        title: 'Cabin Dominoes',
-                        badge: 'Ready',
-                        description:
-                            'Cozy pass-and-play dominoes to challenge an '
-                            'off-watch crewmate on one device, no internet.',
-                        meta: 'Pass & play • 2 crew',
-                        ready: true,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const CabinDominoesScreen(),
-                          ),
-                        ),
-                      ),
+                      ...tiles,
                       const SizedBox(height: 20),
                       const _NightVisionNotice(),
                     ],
@@ -517,6 +623,7 @@ class _CatalogTile extends StatelessWidget {
     required this.meta,
     required this.onTap,
     this.ready = false,
+    this.featured = false,
   });
 
   final String icon;
@@ -528,6 +635,10 @@ class _CatalogTile extends StatelessWidget {
   final VoidCallback onTap;
   final bool ready;
 
+  /// Spotlight flag from the server's weekly featured set. Adds a "Featured
+  /// this week" marker + highlighted border; never affects playability.
+  final bool featured;
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -536,8 +647,14 @@ class _CatalogTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-        child: Padding(
+        child: Container(
           padding: const EdgeInsets.all(14),
+          decoration: featured
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                  border: Border.all(color: AppColors.seafoamBorder),
+                )
+              : null,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -561,6 +678,26 @@ class _CatalogTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (featured) ...[
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.star,
+                            size: 12,
+                            color: AppColors.seafoam,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'FEATURED THIS WEEK',
+                            style: AppTextStyles.badge.copyWith(
+                              color: AppColors.seafoam,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Row(
                       children: [
                         Expanded(

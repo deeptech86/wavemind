@@ -102,7 +102,7 @@ void main() {
   testWidgets('knot master renders its tying arena', (tester) async {
     await pumpScreen(tester, const KnotMasterScreen());
     expect(find.text('Knot Master 3D'), findsOneWidget);
-    expect(find.text('Tie the Bowline'), findsOneWidget);
+    expect(find.text('Close the Loop'), findsOneWidget);
     // Dispose the repeating pulse controller before the test ends.
     await tester.pumpWidget(const SizedBox());
   });
