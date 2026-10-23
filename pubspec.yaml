@@ -59,6 +59,12 @@ dependencies:
   # @visibleForTesting on the (Flutter-free) Dominoes engine's test constructor.
   meta: ^1.16.0
 
+  # Read-only smartwatch health data (steps, sleep): wraps Apple HealthKit
+  # (Apple Watch -> iPhone) and Health Connect (Samsung/Wear OS -> Android)
+  # behind one API. Data is fetched live and never persisted — see
+  # lib/data/health_data_service.dart.
+  health: ^13.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

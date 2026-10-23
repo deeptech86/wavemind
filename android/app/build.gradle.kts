@@ -24,7 +24,10 @@ android {
         applicationId = "com.tidewell.tidewell_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Health Connect (the `health` package's Android backend) requires
+        // API 26+. Flutter's current default (flutter.minSdkVersion) is 24, so
+        // we pin minSdk explicitly rather than inheriting the lower default.
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
