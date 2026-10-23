@@ -1,15 +1,17 @@
-"""TideWell minimal profile backend.
+"""TideWell backend — accounts + content catalog.
 
-A single-profile CRUD service exposing just enough to persist the few identity
-fields the client wanted on a real server (name / email / phone). Everything
-else in the app lives on-device.
+Two concerns, same small stdlib-sqlite3 FastAPI service:
 
-Endpoints:
+Accounts (real multi-user login/signup, the foundation for future
+cross-device wellness competitions):
+    POST  /auth/signup                  -> create account + session, returns {token, user}
+    POST  /auth/login                   -> verify credentials + session, returns {token, user}
+    POST  /auth/logout                  -> delete the caller's session (204)
+    GET   /auth/me                       -> the current user (Bearer-protected)
+    PATCH /auth/me                       -> partial profile update (name/age/sex/fleet_name)
+
+Content catalog (unrelated to accounts, open):
     GET   /health                       -> liveness probe
-    GET   /profile                      -> the stored profile, or null
-    PUT   /profile                      -> upsert the profile {name, email, phone}
-    POST  /profile                      -> alias for PUT (convenience)
-
     GET   /content/catalog              -> all currently-active content
     POST  /content/stories              -> upsert a story (create / replace)
     PATCH /content/stories/{id}         -> partial update (e.g. toggle active)
@@ -20,24 +22,29 @@ Endpoints:
 
 Media files are served statically under ``/media`` from ``backend/media/``.
 
-No auth / roles: there is no login system in the app yet, so this is
-deliberately open and out of scope for this stage.
+Auth model: opaque bearer tokens (no JWT) stored in a ``session`` table, looked
+up on every protected request. Passwords are PBKDF2-HMAC-SHA256 hashed with a
+per-user salt (see ``app.auth``) — stdlib only, no bcrypt/passlib dependency.
+
+The old single-row ``/profile`` placeholder endpoint has been removed; the
+``user`` table / ``/auth/*`` endpoints fully supersede it.
 """
 
 from __future__ import annotations
 
 import os
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
-from . import database, rotation, seed
+from . import auth, database, rotation, seed
 
-app = FastAPI(title="TideWell Content & Profile Service", version="2.0.0")
+app = FastAPI(title="TideWell Accounts & Content Service", version="3.0.0")
 
 # The Flutter client calls this from an emulator / device over the LAN, so keep
 # CORS permissive — there are no credentials or secrets served here.
@@ -49,19 +56,45 @@ app.add_middleware(
 )
 
 
-class ProfileIn(BaseModel):
+# --- Accounts schemas -------------------------------------------------------
+
+
+class SignupIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     email: EmailStr
-    phone: str = Field(..., min_length=1, max_length=40)
+    password: str = Field(..., min_length=auth.MIN_PASSWORD_LENGTH, max_length=200)
+    age: int = Field(..., ge=0, le=150)
+    # Sensitive personal data, kept a free-ish string on purpose — no rigid
+    # enum. Still bounded so it can't be abused as an arbitrary blob.
+    sex: str = Field(..., min_length=1, max_length=40)
+    fleet_name: Optional[str] = Field(default=None, max_length=120)
 
 
-class ProfileOut(BaseModel):
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class ProfilePatch(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    age: Optional[int] = Field(default=None, ge=0, le=150)
+    sex: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    fleet_name: Optional[str] = Field(default=None, max_length=120)
+
+
+class UserOut(BaseModel):
     id: int
     name: str
     email: str
-    phone: str
+    age: int
+    sex: str
+    fleet_name: Optional[str] = None
     created_at: str
-    updated_at: str
+
+
+class AuthOut(BaseModel):
+    token: str
+    user: UserOut
 
 
 # --- Content catalog schemas ------------------------------------------------
@@ -160,27 +193,114 @@ def _startup() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "tidewell-profile"}
+    return {"status": "ok", "service": "tidewell-backend"}
 
 
-@app.get("/profile", response_model=Optional[ProfileOut])
-def read_profile() -> Optional[dict]:
-    """Return the stored profile, or ``null`` (HTTP 200) if none exists yet.
-
-    Returning 200 + null rather than 404 keeps the client's "nothing saved
-    yet" path identical to a normal empty-form load.
-    """
-    return database.get_profile()
+# ---------------------------------------------------------------------------
+# Accounts / auth
+# ---------------------------------------------------------------------------
 
 
-@app.put("/profile", response_model=ProfileOut)
-@app.post("/profile", response_model=ProfileOut)
-def save_profile(payload: ProfileIn) -> dict:
-    return database.upsert_profile(
-        name=payload.name,
-        email=str(payload.email),
-        phone=payload.phone,
-    )
+def current_user(authorization: Optional[str] = Header(default=None)) -> dict:
+    """FastAPI dependency: resolve ``Authorization: Bearer <token>`` to the
+    current user row, or raise 401 for a missing/invalid/expired token."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = authorization[len("bearer ") :].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = database.get_user_for_token(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return user
+
+
+def _issue_session(user: dict) -> dict:
+    """Create a fresh session for ``user`` and return the ``{token, user}``
+    envelope both signup and login respond with."""
+    token = auth.new_session_token()
+    database.create_session(token, user["id"])
+    return {"token": token, "user": database.public_user(user)}
+
+
+@app.post("/auth/signup", response_model=AuthOut, status_code=201)
+def signup(payload: SignupIn) -> dict:
+    """Create an active account immediately (no email verification) and return
+    a session token + the public user. 409 if the email is already taken."""
+    email = str(payload.email).lower()
+    salt = auth.generate_salt()
+    password_hash = auth.hash_password(payload.password, salt)
+    try:
+        user = database.create_user(
+            name=payload.name.strip(),
+            email=email,
+            password_hash=password_hash,
+            password_salt=salt,
+            age=payload.age,
+            sex=payload.sex.strip(),
+            fleet_name=(payload.fleet_name.strip() or None)
+            if payload.fleet_name
+            else None,
+        )
+    except sqlite3.IntegrityError:
+        # UNIQUE(email) violation — the only integrity constraint here.
+        raise HTTPException(
+            status_code=409, detail="An account with that email already exists."
+        )
+    return _issue_session(user)
+
+
+@app.post("/auth/login", response_model=AuthOut)
+def login(payload: LoginIn) -> dict:
+    """Verify credentials and open a new session. Returns a generic 401 on any
+    failure so it never leaks whether the email or the password was wrong."""
+    email = str(payload.email).lower()
+    user = database.get_user_by_email(email)
+    invalid = HTTPException(status_code=401, detail="Invalid email or password.")
+    if user is None:
+        raise invalid
+    if not auth.verify_password(
+        payload.password, user["password_salt"], user["password_hash"]
+    ):
+        raise invalid
+    return _issue_session(user)
+
+
+@app.post("/auth/logout", status_code=204)
+def logout(authorization: Optional[str] = Header(default=None)) -> Response:
+    """Delete the caller's session. Idempotent — an unknown token is a no-op."""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[len("bearer ") :].strip()
+        if token:
+            database.delete_session(token)
+    return Response(status_code=204)
+
+
+@app.get("/auth/me", response_model=UserOut)
+def read_me(user: dict = Depends(current_user)) -> dict:
+    """Return the current user — used by the app on launch to validate a stored
+    token is still good."""
+    return database.public_user(user)
+
+
+@app.patch("/auth/me", response_model=UserOut)
+def update_me(
+    payload: ProfilePatch, user: dict = Depends(current_user)
+) -> dict:
+    """Partial update of the caller's own editable profile fields. Email and
+    password are intentionally out of scope here (they need re-verification)."""
+    fields = payload.model_dump(exclude_unset=True)
+    if "name" in fields and isinstance(fields["name"], str):
+        fields["name"] = fields["name"].strip()
+    if "sex" in fields and isinstance(fields["sex"], str):
+        fields["sex"] = fields["sex"].strip()
+    if "fleet_name" in fields:
+        fn = fields["fleet_name"]
+        fields["fleet_name"] = (fn.strip() or None) if isinstance(fn, str) else fn
+    updated = database.update_user(user["id"], fields)
+    if updated is None:  # pragma: no cover - current_user guarantees existence
+        raise HTTPException(status_code=404, detail="user not found")
+    return database.public_user(updated)
 
 
 # ---------------------------------------------------------------------------

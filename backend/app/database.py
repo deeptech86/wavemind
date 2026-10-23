@@ -1,11 +1,18 @@
-"""Tiny SQLite persistence layer for the TideWell profile service.
+"""Tiny SQLite persistence layer for the TideWell backend.
 
 Deliberately uses the Python standard-library ``sqlite3`` module (no ORM) to
 keep this at the "basic CRUD service" simplicity level the brief asked for.
 
-The service stores a *single* profile row because the TideWell app has no
-login / multi-user system yet. The row is pinned to a fixed primary key so
-``PUT /profile`` is a true upsert rather than an ever-growing table.
+Backs three concerns, all in the same plain-``sqlite3`` style:
+    * **Accounts** — a real multi-user ``user`` table plus opaque bearer
+      ``session`` tokens (the login/signup foundation).
+    * **Content catalog** — rotating stories / ambient sounds / featured games.
+
+The original single-row ``profile`` table (name/email/phone) has been
+**retired**: it was a placeholder built before any accounts system existed, and
+is fully superseded by the ``user`` table below. Nothing reads or writes it any
+more, so its CREATE statement and helpers were removed; an existing DB may still
+carry a stale ``profile`` table, which is simply ignored.
 """
 
 from __future__ import annotations
@@ -13,7 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 # Store the DB file next to the backend package by default; overridable so
@@ -23,8 +30,9 @@ DB_PATH = os.environ.get(
     os.path.join(os.path.dirname(os.path.dirname(__file__)), "tidewell.db"),
 )
 
-# There is only ever one profile, so we pin it to a constant id.
-PROFILE_ID = 1
+# Long-lived sessions: there is no refresh-token flow in this pass, so a single
+# 30-day opaque token is acceptable (re-login once it lapses).
+SESSION_TTL = timedelta(days=30)
 
 
 def _utc_now_iso() -> str:
@@ -40,20 +48,42 @@ def _connect() -> sqlite3.Connection:
 def init_db() -> None:
     """Create every table if it does not exist.
 
-    Profile is the original single-row identity store. The three ``content_*``
-    tables back the rotating content catalog (stories / ambient sounds) plus the
-    weekly featured-game flags — all kept in the same plain-``sqlite3`` style.
+    ``user`` + ``session`` back the accounts system (login/signup). The three
+    ``content_*`` tables back the rotating content catalog (stories / ambient
+    sounds) plus the weekly featured-game flags — all kept in the same
+    plain-``sqlite3`` style.
     """
     with _connect() as conn:
+        # Accounts. ``email`` is the login identifier (unique). The password is
+        # stored only as a PBKDF2 hash + per-user salt (see app.auth); plaintext
+        # never touches the DB. ``sex`` is a free-ish string on purpose — it is
+        # sensitive personal data and not worth over-constraining with an enum.
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS profile (
-                id         INTEGER PRIMARY KEY,
-                name       TEXT NOT NULL,
-                email      TEXT NOT NULL,
-                phone      TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS user (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL,
+                email         TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                password_salt TEXT NOT NULL,
+                age           INTEGER NOT NULL,
+                sex           TEXT NOT NULL,
+                fleet_name    TEXT,
+                created_at    TEXT NOT NULL,
+                updated_at    TEXT NOT NULL
+            )
+            """
+        )
+        # Opaque bearer sessions. One row per successful login/signup; deleted
+        # on logout and ignored once ``expires_at`` has passed.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session (
+                token      TEXT PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES user (id) ON DELETE CASCADE
             )
             """
         )
@@ -112,39 +142,170 @@ def init_db() -> None:
         conn.commit()
 
 
-def get_profile() -> Optional[dict]:
-    """Return the stored profile as a dict, or ``None`` if nothing saved yet."""
+# ---------------------------------------------------------------------------
+# Accounts — users
+# ---------------------------------------------------------------------------
+#
+# Callers (app.main) hash the password via app.auth before handing it here; this
+# layer only persists the already-derived hash + salt. ``public_user`` strips
+# the credential columns for anything that leaves the server.
+
+
+def _user_row_to_dict(row: sqlite3.Row) -> dict:
+    return dict(row)
+
+
+def public_user(row: dict) -> dict:
+    """Project a user row to the shape the API returns — never the hash/salt."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "email": row["email"],
+        "age": row["age"],
+        "sex": row["sex"],
+        "fleet_name": row["fleet_name"],
+        "created_at": row["created_at"],
+    }
+
+
+def get_user_by_email(email: str) -> Optional[dict]:
     with _connect() as conn:
         row = conn.execute(
-            "SELECT * FROM profile WHERE id = ?", (PROFILE_ID,)
+            "SELECT * FROM user WHERE email = ?", (email,)
         ).fetchone()
-        return dict(row) if row else None
+        return _user_row_to_dict(row) if row else None
 
 
-def upsert_profile(name: str, email: str, phone: str) -> dict:
-    """Insert or update the single profile row and return the stored result."""
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM user WHERE id = ?", (user_id,)
+        ).fetchone()
+        return _user_row_to_dict(row) if row else None
+
+
+def create_user(
+    *,
+    name: str,
+    email: str,
+    password_hash: str,
+    password_salt: str,
+    age: int,
+    sex: str,
+    fleet_name: Optional[str],
+) -> dict:
+    """Insert a new user row and return it. Raises ``sqlite3.IntegrityError``
+    if the email is already taken (callers translate that to HTTP 409)."""
     now = _utc_now_iso()
     with _connect() as conn:
-        existing = conn.execute(
-            "SELECT created_at FROM profile WHERE id = ?", (PROFILE_ID,)
-        ).fetchone()
-        created_at = existing["created_at"] if existing else now
-        conn.execute(
+        cursor = conn.execute(
             """
-            INSERT INTO profile (id, name, email, phone, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                email = excluded.email,
-                phone = excluded.phone,
-                updated_at = excluded.updated_at
+            INSERT INTO user (
+                name, email, password_hash, password_salt,
+                age, sex, fleet_name, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (PROFILE_ID, name, email, phone, created_at, now),
+            (
+                name,
+                email,
+                password_hash,
+                password_salt,
+                age,
+                sex,
+                fleet_name,
+                now,
+                now,
+            ),
         )
         conn.commit()
-    result = get_profile()
+        user_id = int(cursor.lastrowid)
+    result = get_user_by_id(user_id)
     assert result is not None  # just written
     return result
+
+
+def update_user(user_id: int, fields: dict[str, Any]) -> Optional[dict]:
+    """Partially update a user's editable profile fields. Returns the updated
+    row, or ``None`` if the user does not exist."""
+    allowed = {"name", "age", "sex", "fleet_name"}
+    sets: list[str] = []
+    values: list[Any] = []
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        sets.append(f"{key} = ?")
+        values.append(value)
+    with _connect() as conn:
+        if conn.execute(
+            "SELECT 1 FROM user WHERE id = ?", (user_id,)
+        ).fetchone() is None:
+            return None
+        if sets:
+            sets.append("updated_at = ?")
+            values.append(_utc_now_iso())
+            values.append(user_id)
+            conn.execute(
+                f"UPDATE user SET {', '.join(sets)} WHERE id = ?", values
+            )
+            conn.commit()
+    return get_user_by_id(user_id)
+
+
+# ---------------------------------------------------------------------------
+# Accounts — sessions
+# ---------------------------------------------------------------------------
+
+
+def create_session(token: str, user_id: int) -> dict:
+    """Persist a new session for ``user_id`` and return it."""
+    now = datetime.now(timezone.utc)
+    expires = now + SESSION_TTL
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO session (token, user_id, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (token, user_id, now.isoformat(), expires.isoformat()),
+        )
+        conn.commit()
+    return {
+        "token": token,
+        "user_id": user_id,
+        "created_at": now.isoformat(),
+        "expires_at": expires.isoformat(),
+    }
+
+
+def get_user_for_token(token: str) -> Optional[dict]:
+    """Resolve a bearer token to its (non-expired) user row.
+
+    Returns ``None`` for an unknown token; also deletes and returns ``None`` for
+    an expired one so the table self-prunes as stale tokens are presented.
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT user_id, expires_at FROM session WHERE token = ?", (token,)
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            expires_at = datetime.fromisoformat(row["expires_at"])
+        except (ValueError, TypeError):
+            expires_at = None
+        if expires_at is None or expires_at <= datetime.now(timezone.utc):
+            conn.execute("DELETE FROM session WHERE token = ?", (token,))
+            conn.commit()
+            return None
+        user_id = row["user_id"]
+    return get_user_by_id(user_id)
+
+
+def delete_session(token: str) -> None:
+    """Delete a session row (logout). A no-op if the token is unknown."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM session WHERE token = ?", (token,))
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------

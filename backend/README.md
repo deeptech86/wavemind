@@ -1,9 +1,11 @@
-# TideWell Content & Profile Backend
+# TideWell Accounts & Content Backend
 
 A deliberately small FastAPI service with two jobs:
 
-1. **Profile** — stores the few identity fields the client wanted on a real
-   server (**name, email, phone**). Single row, upserted in place. No auth.
+1. **Accounts** — a real multi-user login/signup system (the foundation for the
+   future cross-device wellness competitions). Users sign up with **name,
+   email, password, age, sex** and an optional **fleet_name**; sessions are
+   opaque bearer tokens. See "Accounts / auth" below.
 2. **Content catalog** — the schedule-controlled rotation of **narrated
    stories** and **ambient soundscapes**, plus an **automatic weekly
    rotation** that spotlights 2 of the built-in **games** as "featured" each
@@ -13,8 +15,11 @@ A deliberately small FastAPI service with two jobs:
    lazily.
 
 Everything else in the TideWell app (journal entries, mood check-ins, breathing
-streaks, Fleet Knots) lives on-device and never touches this service. There is
-still no login / multi-user system, so this remains open — no auth, no roles.
+streaks, Fleet Knots) lives on-device and never touches this service.
+
+> The original single-row `/profile` placeholder endpoint (name/email/phone)
+> has been **retired** — it predated any accounts concept and is fully
+> superseded by the `user` table and `/auth/*` endpoints below.
 
 ## Stack
 
@@ -22,15 +27,19 @@ still no login / multi-user system, so this remains open — no auth, no roles.
 - SQLite via the Python standard-library `sqlite3` module (no ORM — kept at a
   basic-CRUD simplicity level)
 - Pydantic for request/response validation
+- Password hashing + session tokens via the standard library only
+  (`hashlib` / `hmac` / `secrets`) — no `bcrypt` / `passlib` dependency
 
 ## Endpoints
 
 | Method  | Path                               | Purpose                                            |
 | ------- | ---------------------------------- | -------------------------------------------------- |
 | `GET`   | `/health`                          | Liveness probe -> `{"status":"ok", ...}`           |
-| `GET`   | `/profile`                         | Stored profile, or `null` (HTTP 200) if none saved |
-| `PUT`   | `/profile`                         | Upsert profile `{name, email, phone}`              |
-| `POST`  | `/profile`                         | Alias for `PUT`                                    |
+| `POST`  | `/auth/signup`                     | Create account + session -> `{token, user}` (201)  |
+| `POST`  | `/auth/login`                      | Verify credentials + session -> `{token, user}`    |
+| `POST`  | `/auth/logout`                     | Delete caller's session (204). Bearer token        |
+| `GET`   | `/auth/me`                         | Current user. Bearer token                         |
+| `PATCH` | `/auth/me`                         | Partial profile update. Bearer token               |
 | `GET`   | `/content/catalog`                 | All currently-**active** content (see below)       |
 | `POST`  | `/content/stories`                 | Upsert a story (create / full replace)             |
 | `PATCH` | `/content/stories/{id}`            | Partial update — e.g. `{"active": false}`          |
@@ -39,6 +48,59 @@ still no login / multi-user system, so this remains open — no auth, no roles.
 | `POST`  | `/content/featured-games`          | Register a game's rotation eligibility             |
 | `PATCH` | `/content/featured-games/{key}`    | Toggle a game in/out of the rotation pool          |
 | `GET`   | `/media/...`                       | Static media (story / sound audio files)           |
+
+## Accounts / auth
+
+Real multi-user accounts. Signup creates an **active** account immediately —
+there is no email verification (no email-sending infrastructure exists, and
+none was added).
+
+### Request / response shapes
+
+```jsonc
+// POST /auth/signup   (201)
+// body:
+{ "name": "Marcus Thorne", "email": "marcus@example.com",
+  "password": "deepsea123", "age": 34, "sex": "male",
+  "fleet_name": "Northern Fleet" }        // fleet_name optional, may be omitted/null
+// -> { "token": "<opaque>", "user": { ...public user... } }
+
+// POST /auth/login
+{ "email": "marcus@example.com", "password": "deepsea123" }
+// -> { "token": "<opaque>", "user": { ...public user... } }
+
+// GET /auth/me        (Authorization: Bearer <token>)  -> public user
+// PATCH /auth/me       (Authorization: Bearer <token>)
+{ "name": "Captain Marcus", "age": 35, "sex": "male",
+  "fleet_name": "Southern Fleet" }        // all fields optional (partial update)
+
+// public user (never includes the password hash or salt):
+{ "id": 1, "name": "...", "email": "...", "age": 34, "sex": "male",
+  "fleet_name": "Northern Fleet", "created_at": "2026-10-23T06:45:45+00:00" }
+```
+
+- **Email** is the login identifier, stored lowercased and `UNIQUE`; a
+  duplicate signup returns **409**. Validated with Pydantic `EmailStr`.
+- **Password** must be at least 8 characters (enforced server-side); too-short
+  fails validation with **422**. `PATCH /auth/me` deliberately cannot change
+  the email or password (those need a re-verification flow that is out of scope).
+- **Login** failures return a generic **401 "Invalid email or password."** that
+  never reveals whether the email or the password was wrong.
+
+### Password hashing & sessions
+
+- **Hashing**: `hashlib.pbkdf2_hmac("sha256", password, salt, 200_000)` with a
+  per-user random salt (`secrets.token_bytes`). The derived hash and the salt
+  are both stored as hex strings in the `user` row; **plaintext is never
+  stored**. Verification is constant-time (`hmac.compare_digest`). All of this
+  lives in `app/auth.py` as pure functions (unit-tested in
+  `tests/test_auth.py`).
+- **Sessions**: no JWT. `POST /auth/login` / `/auth/signup` create a row in the
+  `session` table keyed by an opaque `secrets.token_urlsafe(32)` token, with a
+  **30-day** expiry (long-lived — there is no refresh-token flow in this pass).
+  Protected endpoints require `Authorization: Bearer <token>`; a missing,
+  unknown, or expired token returns **401**. Expired tokens are pruned from the
+  table as they are presented. `POST /auth/logout` deletes the caller's row.
 
 ### `GET /content/catalog` shape
 
@@ -73,7 +135,9 @@ automatic weekly rotation currently picks. See "Featured games" below.
 
 ### Table schemas
 
-- `profile`: `id, name, email, phone, created_at, updated_at`
+- `user`: `id, name, email (unique), password_hash, password_salt, age, sex,
+  fleet_name (nullable), created_at, updated_at`
+- `session`: `token (PK), user_id (FK -> user.id), created_at, expires_at`
 - `content_story`: `id, title, series, narrator, teaser_subtitle, excerpt (JSON
   list), coordinates, swell_note, media_path, duration_label, active,
   sort_order, created_at, updated_at`
@@ -149,11 +213,24 @@ The SQLite file is created automatically at `backend/tidewell.db` on first run
 
 ```bash
 curl http://localhost:8010/health
-curl http://localhost:8010/profile                       # -> null initially
-curl -X PUT http://localhost:8010/profile \
+
+# Accounts: signup -> capture the token -> use it on protected endpoints
+TOKEN=$(curl -s -X POST http://localhost:8010/auth/signup \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Marcus Thorne","email":"marcus@example.com","phone":"+1 555 0100"}'
-curl http://localhost:8010/profile                       # -> the saved profile
+  -d '{"name":"Marcus Thorne","email":"marcus@example.com","password":"deepsea123","age":34,"sex":"male","fleet_name":"Northern Fleet"}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
+
+curl -X POST http://localhost:8010/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"X","email":"marcus@example.com","password":"another12","age":9,"sex":"x"}'  # -> 409 duplicate
+curl -X POST http://localhost:8010/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"marcus@example.com","password":"wrongpass"}'                                 # -> 401 generic
+curl http://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN"                         # -> the user
+curl -X PATCH http://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"name":"Captain Marcus","age":35}'                # -> updated user
+curl -X POST http://localhost:8010/auth/logout -H "Authorization: Bearer $TOKEN"             # -> 204
+curl http://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN"                         # -> 401 (session gone)
 
 # Content catalog
 curl http://localhost:8010/content/catalog               # -> active stories/sounds/games

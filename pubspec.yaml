@@ -50,8 +50,14 @@ dependencies:
   # (lazily-downloaded story / soundscape audio stored in app-local storage).
   path_provider: ^2.1.4
 
-  # Stage 4 — tiny remote profile backend (name/email/phone only).
+  # Stage 4 — remote backend: accounts/auth + content catalog.
   http: ^1.2.2
+
+  # Accounts auth — stores ONLY the session token, in the platform keychain
+  # (iOS Keychain / Android EncryptedSharedPreferences). A credential must not
+  # sit in plain sqflite/shared_preferences, so this is a deliberate exception
+  # to the app's "keep dependencies minimal" rule.
+  flutter_secure_storage: ^11.2.0
 
   # Stage 3 — tilt sensing for the Sextant Horizon Balance game.
   sensors_plus: ^7.1.1

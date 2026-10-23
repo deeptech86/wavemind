@@ -1,41 +1,53 @@
 import 'package:flutter/material.dart';
 
-import '../data/models/user_profile.dart';
-import '../data/profile_api.dart';
+import '../data/auth_api.dart';
+import '../data/auth_token_storage.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
+import '../widgets/auth_form.dart';
 import '../widgets/back_header.dart';
+import 'welcome_screen.dart';
 
-/// Crew profile screen (Stage 4).
+/// Crew profile screen.
 ///
-/// The only part of the app backed by a remote server: it reads and writes the
-/// sailor's name / email / phone to the tiny FastAPI profile service (see
-/// `backend/`). Everything else in TideWell stays on-device.
+/// Backed by the real accounts system: it reads the signed-in sailor's account
+/// from `GET /auth/me` and saves edits to the editable fields (name / age /
+/// sex / fleet name) via `PATCH /auth/me`. Email and password aren't editable
+/// here — changing those needs a re-verification flow that's out of scope.
 ///
-/// The network call is deliberately non-blocking for the rest of the app: if
-/// the backend is unreachable, the screen surfaces a clear message and still
-/// lets the user fill the form — it never crashes or hangs the experience.
+/// The network call is deliberately non-blocking: if the backend is
+/// unreachable the screen surfaces a clear, retry-able message rather than
+/// crashing or hanging. A Logout action clears the stored session token and
+/// returns to the Welcome screen.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, ProfileApi? api}) : _api = api;
+  const ProfileScreen({super.key, AuthApi? api, AuthTokenStorage? tokenStorage})
+    : _api = api,
+      _tokenStorage = tokenStorage;
 
-  final ProfileApi? _api;
+  final AuthApi? _api;
+  final AuthTokenStorage? _tokenStorage;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late final ProfileApi _api = widget._api ?? ProfileApi();
+  late final AuthApi _api = widget._api ?? AuthApi();
   late final bool _ownsApi = widget._api == null;
+  late final AuthTokenStorage _tokenStorage =
+      widget._tokenStorage ?? AuthTokenStorage();
 
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  final _ageCtrl = TextEditingController();
+  final _sexCtrl = TextEditingController();
+  final _fleetCtrl = TextEditingController();
 
+  String _email = '';
   bool _loading = true;
   bool _saving = false;
+  bool _loggingOut = false;
   String? _loadError;
 
   @override
@@ -49,18 +61,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _loading = true;
       _loadError = null;
     });
+    final token = await _tokenStorage.read();
+    if (token == null || token.isEmpty) {
+      // No session — shouldn't happen behind the auth gate, but handle it by
+      // bouncing back to Welcome rather than showing an empty form.
+      if (mounted) _returnToWelcome();
+      return;
+    }
     try {
-      final profile = await _api.fetch();
+      final account = await _api.me(token);
       if (!mounted) return;
-      if (profile != null) {
-        _nameCtrl.text = profile.name;
-        _emailCtrl.text = profile.email;
-        _phoneCtrl.text = profile.phone;
+      _nameCtrl.text = account.name;
+      _ageCtrl.text = account.age.toString();
+      _sexCtrl.text = account.sex;
+      _fleetCtrl.text = account.fleetName ?? '';
+      setState(() {
+        _email = account.email;
+        _loading = false;
+      });
+    } on AuthApiException catch (e) {
+      if (!mounted) return;
+      if (e.isAuthFailure) {
+        // Stale/expired token — clear it and return to Welcome.
+        await _tokenStorage.clear();
+        if (mounted) _returnToWelcome();
+        return;
       }
-      setState(() => _loading = false);
-    } on ProfileApiException catch (e) {
-      if (!mounted) return;
-      // Not fatal: let the user still fill in and attempt a save.
+      // Transport failure: not fatal — surface a retry-able banner.
       setState(() {
         _loading = false;
         _loadError = e.message;
@@ -70,38 +97,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final token = await _tokenStorage.read();
+    if (!mounted) return;
+    if (token == null || token.isEmpty) {
+      _returnToWelcome();
+      return;
+    }
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await _api.save(
-        UserProfile(
-          name: _nameCtrl.text.trim(),
-          email: _emailCtrl.text.trim(),
-          phone: _phoneCtrl.text.trim(),
-        ),
+      await _api.updateProfile(
+        token,
+        name: _nameCtrl.text.trim(),
+        age: int.parse(_ageCtrl.text.trim()),
+        sex: _sexCtrl.text.trim(),
+        fleetName: _fleetCtrl.text.trim(),
       );
       if (!mounted) return;
       setState(() => _saving = false);
       messenger.showSnackBar(
         const SnackBar(content: Text('Crew details saved to the registry.')),
       );
-    } on ProfileApiException catch (e) {
+    } on AuthApiException catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
+      if (e.isAuthFailure && e.message == 'Session expired.') {
+        await _tokenStorage.clear();
+        if (mounted) _returnToWelcome();
+        return;
+      }
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: AppColors.stormRed,
-        ),
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.stormRed),
       );
     }
+  }
+
+  Future<void> _logout() async {
+    setState(() => _loggingOut = true);
+    final token = await _tokenStorage.read();
+    if (token != null && token.isNotEmpty) {
+      // Best-effort server-side session delete; the local token is cleared
+      // regardless so logout always succeeds from the user's perspective.
+      try {
+        await _api.logout(token);
+      } on AuthApiException {
+        // Ignore — we still clear locally below.
+      }
+    }
+    await _tokenStorage.clear();
+    if (!mounted) return;
+    _returnToWelcome();
+  }
+
+  void _returnToWelcome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
+      (route) => false,
+    );
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _emailCtrl.dispose();
-    _phoneCtrl.dispose();
+    _ageCtrl.dispose();
+    _sexCtrl.dispose();
+    _fleetCtrl.dispose();
     if (_ownsApi) _api.dispose();
     super.dispose();
   }
@@ -137,23 +197,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'These few details are stored on the crew '
-                                'registry. Everything else in TideWell stays '
-                                'private on this device.',
+                                'Your crew account. Everything else in TideWell '
+                                'stays private on this device.',
                                 style: AppTextStyles.bodySmall,
                               ),
                               if (_loadError != null) ...[
                                 const SizedBox(height: 16),
-                                _ErrorBanner(
+                                InlineErrorBanner(
                                   message: _loadError!,
                                   onRetry: _load,
                                 ),
                               ],
-                              const SizedBox(height: 24),
-                              _Field(
+                              if (_email.isNotEmpty) ...[
+                                const SizedBox(height: 20),
+                                _EmailRow(email: _email),
+                              ],
+                              const SizedBox(height: 20),
+                              AuthTextField(
                                 label: 'Name',
                                 controller: _nameCtrl,
                                 hint: 'e.g. Marcus Thorne',
+                                textCapitalizationWords: true,
                                 textInputAction: TextInputAction.next,
                                 validator: (v) =>
                                     (v == null || v.trim().isEmpty)
@@ -161,30 +225,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     : null,
                               ),
                               const SizedBox(height: 16),
-                              _Field(
-                                label: 'Email',
-                                controller: _emailCtrl,
-                                hint: 'e.g. marcus@example.com',
-                                keyboardType: TextInputType.emailAddress,
+                              AuthTextField(
+                                label: 'Age',
+                                controller: _ageCtrl,
+                                hint: 'e.g. 34',
+                                keyboardType: TextInputType.number,
                                 textInputAction: TextInputAction.next,
-                                validator: _validateEmail,
+                                validator: (v) {
+                                  final value = v?.trim() ?? '';
+                                  if (value.isEmpty) {
+                                    return 'Please enter your age.';
+                                  }
+                                  final age = int.tryParse(value);
+                                  if (age == null || age < 0 || age > 150) {
+                                    return 'Please enter a valid age.';
+                                  }
+                                  return null;
+                                },
                               ),
                               const SizedBox(height: 16),
-                              _Field(
-                                label: 'Phone',
-                                controller: _phoneCtrl,
-                                hint: 'e.g. +1 555 0100',
-                                keyboardType: TextInputType.phone,
-                                textInputAction: TextInputAction.done,
+                              AuthTextField(
+                                label: 'Sex',
+                                controller: _sexCtrl,
+                                hint: 'e.g. male, female, …',
+                                textInputAction: TextInputAction.next,
                                 validator: (v) =>
                                     (v == null || v.trim().isEmpty)
-                                    ? 'Please enter a phone number.'
+                                    ? 'Please enter this field.'
                                     : null,
                               ),
+                              const SizedBox(height: 16),
+                              AuthTextField(
+                                label: 'Fleet Name',
+                                controller: _fleetCtrl,
+                                hint: 'e.g. Northern Fleet',
+                                optional: true,
+                                textCapitalizationWords: true,
+                                textInputAction: TextInputAction.done,
+                              ),
                               const SizedBox(height: 28),
-                              _SaveButton(
-                                saving: _saving,
-                                onTap: _saving ? null : _save,
+                              AuthPrimaryButton(
+                                label: 'Save Crew Details',
+                                busy: _saving,
+                                onTap: _save,
+                              ),
+                              const SizedBox(height: 16),
+                              _LogoutButton(
+                                busy: _loggingOut,
+                                onTap: _loggingOut ? null : _logout,
                               ),
                             ],
                           ),
@@ -197,69 +285,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  static String? _validateEmail(String? v) {
-    final value = v?.trim() ?? '';
-    if (value.isEmpty) return 'Please enter an email.';
-    // Light client-side check; the backend validates authoritatively.
-    final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
-    return ok ? null : 'Please enter a valid email.';
-  }
 }
 
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.label,
-    required this.controller,
-    required this.hint,
-    this.keyboardType,
-    this.textInputAction,
-    this.validator,
-  });
+/// Read-only display of the account email (not editable here).
+class _EmailRow extends StatelessWidget {
+  const _EmailRow({required this.email});
 
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-  final TextInputType? keyboardType;
-  final TextInputAction? textInputAction;
-  final FormFieldValidator<String>? validator;
+  final String email;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: AppTextStyles.caption),
+        Text('EMAIL', style: AppTextStyles.caption),
         const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          textInputAction: textInputAction,
-          validator: validator,
-          cursorColor: AppColors.seafoam,
-          style: AppTextStyles.body.copyWith(color: AppColors.white),
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: AppColors.cardSurface,
-            hintText: hint,
-            hintStyle: AppTextStyles.body.copyWith(color: AppColors.muted),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-              borderSide: const BorderSide(color: AppColors.glassBorderSoft),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-              borderSide: const BorderSide(color: AppColors.seafoam),
-            ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.glassFillFaint,
+            borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+            border: Border.all(color: AppColors.glassBorderSoft),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  email,
+                  style: AppTextStyles.body.copyWith(color: AppColors.muted),
+                ),
+              ),
+              const Icon(Icons.lock_outline, size: 16, color: AppColors.muted),
+            ],
           ),
         ),
       ],
@@ -267,90 +325,43 @@ class _Field extends StatelessWidget {
   }
 }
 
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message, required this.onRetry});
+/// Secondary, outlined logout action beneath the primary save button.
+class _LogoutButton extends StatelessWidget {
+  const _LogoutButton({required this.busy, required this.onTap});
 
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.stormFaint,
-        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-        border: Border.all(color: AppColors.stormRed),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.cloud_off, size: 18, color: AppColors.stormRed),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: AppTextStyles.caption.copyWith(color: AppColors.cream),
-            ),
-          ),
-          TextButton(
-            onPressed: onRetry,
-            child: Text(
-              'Retry',
-              style: AppTextStyles.bodyStrong.copyWith(
-                color: AppColors.seafoam,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SaveButton extends StatelessWidget {
-  const _SaveButton({required this.saving, required this.onTap});
-
-  final bool saving;
+  final bool busy;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+      child: InkWell(
         borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.cardShadow,
-            offset: Offset(0, 10),
-            blurRadius: 12,
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+            border: Border.all(color: AppColors.stormRed),
           ),
-        ],
-      ),
-      child: Material(
-        color: AppColors.seafoam,
-        borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-            child: Center(
-              child: saving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.onAccent,
-                      ),
-                    )
-                  : Text(
-                      'Save Crew Details',
-                      style: AppTextStyles.buttonLarge.copyWith(
-                        color: AppColors.onAccent,
-                      ),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          child: Center(
+            child: busy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.stormRed,
                     ),
-            ),
+                  )
+                : Text(
+                    'Log Out',
+                    style: AppTextStyles.buttonLarge.copyWith(
+                      color: AppColors.stormRed,
+                    ),
+                  ),
           ),
         ),
       ),

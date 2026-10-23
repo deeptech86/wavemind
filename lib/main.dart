@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'screens/welcome_screen.dart';
+import 'screens/auth_gate.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -26,7 +26,9 @@ class TideWellApp extends StatelessWidget {
       title: 'TideWell',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const WelcomeScreen(),
+      // The auth gate validates any stored session token on launch and routes
+      // to the Helm dashboard (valid) or the Welcome screen (missing/invalid).
+      home: const AuthGate(),
     );
   }
 }

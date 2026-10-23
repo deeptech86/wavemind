@@ -17,7 +17,7 @@ class ContentApiException implements Exception {
   String toString() => 'ContentApiException: $message';
 }
 
-/// Thin HTTP client for the content catalog service. Mirrors [ProfileApi]'s
+/// Thin HTTP client for the content catalog service. Mirrors the auth client's
 /// posture: short timeouts, typed failures, and no assumption that the backend
 /// is reachable (this is a sailing app — connectivity is unreliable by theme).
 class ContentApi {

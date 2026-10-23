@@ -7,7 +7,7 @@ import '../core/app_assets.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
-import 'home_dashboard_screen.dart';
+import 'signup_screen.dart';
 
 /// Onboarding / splash screen (Figma node 3:10 "welcome").
 ///
@@ -17,8 +17,10 @@ class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   void _embark(BuildContext context) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const HomeDashboardScreen()),
+    // "Embark" reads as starting fresh, so it opens Signup; returning sailors
+    // reach Login from the "Already have an account? Log in" link there.
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SignupScreen()),
     );
   }
 
