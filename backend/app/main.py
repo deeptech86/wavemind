@@ -15,8 +15,8 @@ Endpoints:
     PATCH /content/stories/{id}         -> partial update (e.g. toggle active)
     POST  /content/sounds               -> upsert a sound
     PATCH /content/sounds/{id}          -> partial update
-    POST  /content/featured-games       -> upsert a featured-game flag
-    PATCH /content/featured-games/{key} -> partial update
+    POST  /content/featured-games       -> register a game's rotation eligibility
+    PATCH /content/featured-games/{key} -> toggle a game in/out of the rotation pool
 
 Media files are served statically under ``/media`` from ``backend/media/``.
 
@@ -27,6 +27,7 @@ deliberately open and out of scope for this stage.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -34,7 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
-from . import database, seed
+from . import database, rotation, seed
 
 app = FastAPI(title="TideWell Content & Profile Service", version="2.0.0")
 
@@ -114,6 +115,10 @@ class SoundPatch(BaseModel):
 
 class FeaturedGameIn(BaseModel):
     game_key: str = Field(..., min_length=1, max_length=80)
+    # NOT "currently featured" — this is rotation *eligibility*. Which
+    # eligible games are featured this week is computed by
+    # `rotation.featured_window`, not stored. Set False to pull a game out of
+    # rotation (e.g. it's not playable yet).
     active: bool = False
     effective_from: str = ""
     sort_order: int = 0
@@ -185,14 +190,28 @@ def save_profile(payload: ProfileIn) -> dict:
 
 @app.get("/content/catalog")
 def read_catalog() -> dict:
-    """Everything currently ``active``: stories, sounds and featured games.
+    """Everything currently ``active``: stories, sounds and this week's
+    featured games.
 
     Media items carry a full ``mediaUrl`` the app downloads lazily, plus a
     ``mediaVersion`` the device caches so unchanged files aren't re-fetched.
+
+    Featured games are **not** a manually-toggled set: ``featured_game.active``
+    marks a game as *eligible* for rotation (e.g. a still-unplayable game like
+    Fog Signal Echo is excluded until it ships), and `rotation.featured_window`
+    deterministically picks this week's 2 from the eligible pool — no cron job,
+    nothing to forget to flip.
     """
     stories = [_with_media_url(s) for s in database.list_stories(active_only=True)]
     sounds = [_with_media_url(s) for s in database.list_sounds(active_only=True)]
-    games = database.list_featured_games(active_only=True)
+    eligible = database.list_featured_games(active_only=True)
+    this_weeks_keys = rotation.featured_window(
+        [g["game_key"] for g in eligible],
+        datetime.now(timezone.utc).date(),
+        count=2,
+    )
+    by_key = {g["game_key"]: g for g in eligible}
+    games = [by_key[key] for key in this_weeks_keys]
     return {"stories": stories, "sounds": sounds, "featuredGames": games}
 
 

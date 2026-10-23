@@ -5,10 +5,12 @@ A deliberately small FastAPI service with two jobs:
 1. **Profile** — stores the few identity fields the client wanted on a real
    server (**name, email, phone**). Single row, upserted in place. No auth.
 2. **Content catalog** — the schedule-controlled rotation of **narrated
-   stories** and **ambient soundscapes**, plus which of the five built-in
-   **games** are "featured" this week. Media files live on disk here (served
-   under `/media`) so growing audio never bloats the app binary; the device
-   syncs only lightweight metadata and downloads media lazily.
+   stories** and **ambient soundscapes**, plus an **automatic weekly
+   rotation** that spotlights 2 of the built-in **games** as "featured" each
+   week (no manual toggling — see "Featured games" below). Media files live
+   on disk here (served under `/media`) so growing audio never bloats the app
+   binary; the device syncs only lightweight metadata and downloads media
+   lazily.
 
 Everything else in the TideWell app (journal entries, mood check-ins, breathing
 streaks, Fleet Knots) lives on-device and never touches this service. There is
@@ -34,8 +36,8 @@ still no login / multi-user system, so this remains open — no auth, no roles.
 | `PATCH` | `/content/stories/{id}`            | Partial update — e.g. `{"active": false}`          |
 | `POST`  | `/content/sounds`                  | Upsert an ambient sound                            |
 | `PATCH` | `/content/sounds/{id}`             | Partial update                                     |
-| `POST`  | `/content/featured-games`          | Upsert a featured-game flag                        |
-| `PATCH` | `/content/featured-games/{key}`    | Partial update                                     |
+| `POST`  | `/content/featured-games`          | Register a game's rotation eligibility             |
+| `PATCH` | `/content/featured-games/{key}`    | Toggle a game in/out of the rotation pool          |
 | `GET`   | `/media/...`                       | Static media (story / sound audio files)           |
 
 ### `GET /content/catalog` shape
@@ -62,8 +64,12 @@ still no login / multi-user system, so this remains open — no auth, no roles.
 }
 ```
 
-Only `active` rows are returned. `mediaVersion` is the item's `updated_at`; the
-device caches it and only re-downloads a media file when the version changes.
+Stories/sounds: only `active` rows are returned. `mediaVersion` is the item's
+`updated_at`; the device caches it and only re-downloads a media file when the
+version changes.
+
+`featuredGames`: **not** every `active` (eligible) game — exactly the 2 the
+automatic weekly rotation currently picks. See "Featured games" below.
 
 ### Table schemas
 
@@ -82,14 +88,36 @@ teaser copy + the `active` flag.
 The five `game_key`s are: `calm_your_waves`, `knot_master`, `fog_signal_echo`,
 `sextant_horizon`, `cabin_dominoes`.
 
+## Featured games (automatic weekly rotation)
+
+`featured_game.active` is **rotation eligibility**, not "currently featured".
+Day-one seeding marks every playable game eligible (`calm_your_waves`,
+`knot_master`, `sextant_horizon`, `cabin_dominoes`) and excludes
+`fog_signal_echo` since it's still a "coming soon" placeholder client-side.
+
+Which 2 eligible games are spotlighted **this week** is computed on every
+`GET /content/catalog` call by `app.rotation.featured_window` — a pure
+function of (eligible keys, today's date). Same calendar week → same 2 picks;
+the window advances by one game every ~7 days and wraps around the eligible
+pool, so every eligible game gets fair rotation over time. There's no stored
+"this week's picks" row to go stale and nothing to remember to toggle weekly.
+
+Use the `PATCH` endpoint only to change the **eligible pool** — e.g. pull a
+game out of rotation, or add `fog_signal_echo` once it's actually playable:
+
+```bash
+curl -X PATCH http://localhost:8010/content/featured-games/fog_signal_echo \
+  -H 'Content-Type: application/json' -d '{"active": true}'   # now eligible
+```
+
 ## Seeding (day-one content)
 
 `app/seed.py` mirrors the content the app currently ships hardcoded (3 stories +
 3 soundscapes) onto the server and **copies the real audio files** out of the
 app's `assets/audio/` into `backend/media/stories/` and `backend/media/sounds/`,
 so the catalog serves playable media immediately. It also registers all five
-games, spotlighting `calm_your_waves` + `knot_master` as the initial featured
-set.
+games, marking the four playable ones eligible for the weekly rotation (see
+"Featured games" above).
 
 ```bash
 cd backend
@@ -136,8 +164,9 @@ curl -X PATCH http://localhost:8010/content/stories/st_elmos_light \
   -H 'Content-Type: application/json' -d '{"active": false}'
 curl http://localhost:8010/content/catalog               # -> st_elmos_light no longer listed
 
-# Spotlight a different game this week
-curl -X PATCH http://localhost:8010/content/featured-games/sextant_horizon \
+# Add (or remove) a game from the weekly rotation pool — which 2 eligible
+# games are actually featured this week is computed automatically, not set here
+curl -X PATCH http://localhost:8010/content/featured-games/fog_signal_echo \
   -H 'Content-Type: application/json' -d '{"active": true}'
 ```
 
