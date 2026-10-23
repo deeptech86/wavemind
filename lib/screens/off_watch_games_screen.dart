@@ -320,7 +320,7 @@ class _IntroCard extends StatelessWidget {
           Text(
             'Tactile, low-stimulation focus puzzles designed to decelerate '
             'heart rate and untangle mental strain without blue-light fatigue.',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.bodyMist),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.white),
           ),
           const SizedBox(height: 12),
           Row(
@@ -411,7 +411,7 @@ class _FeaturedRitual extends StatelessWidget {
           Text(
             'Nautical astrometry: align the night constellation grid to true '
             'magnetic north.',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.bodyMist),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.white),
           ),
           const SizedBox(height: 14),
           const _ConstellationArena(),
@@ -715,7 +715,7 @@ class _CatalogTile extends StatelessWidget {
                     Text(
                       description,
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.bodyMist,
+                        color: AppColors.white,
                         height: 1.35,
                       ),
                     ),
@@ -805,7 +805,7 @@ class _NightVisionNotice extends StatelessWidget {
                 Text(
                   'Colors and lumens are calibrated to protect night vision '
                   'before the midnight watch handover.',
-                  style: AppTextStyles.caption.copyWith(color: AppColors.cream),
+                  style: AppTextStyles.caption.copyWith(color: AppColors.white),
                 ),
               ],
             ),

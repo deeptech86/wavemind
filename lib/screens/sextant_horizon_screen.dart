@@ -212,7 +212,7 @@ class _SextantIntro extends StatelessWidget {
           Text(
             'Tilt the deck gently to float the spirit bubble back to centre. '
             'Hold it steady on the horizon to let the calm meter fill.',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.bodyMist),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.white),
           ),
         ],
       ),
@@ -421,7 +421,7 @@ class _BalanceAchieved extends StatelessWidget {
                 Text(
                   'Steady inner ear, steady mind. Reset to settle again.',
                   style:
-                      AppTextStyles.caption.copyWith(color: AppColors.cream),
+                      AppTextStyles.caption.copyWith(color: AppColors.white),
                 ),
               ],
             ),
@@ -464,7 +464,7 @@ class _SensorFallback extends StatelessWidget {
                   'cannot run here. Try on a physical phone with a motion '
                   'sensor.',
                   style:
-                      AppTextStyles.caption.copyWith(color: AppColors.cream),
+                      AppTextStyles.caption.copyWith(color: AppColors.white),
                 ),
               ],
             ),

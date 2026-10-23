@@ -162,7 +162,7 @@ class _PassPlayNotice extends StatelessWidget {
             child: Text(
               'Pass-and-play on one device — hand it to your crewmate each '
               'turn. No internet, no mesh needed.',
-              style: AppTextStyles.caption.copyWith(color: AppColors.cream),
+              style: AppTextStyles.caption.copyWith(color: AppColors.white),
             ),
           ),
         ],

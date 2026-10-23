@@ -218,7 +218,7 @@ class _MoodLauncher extends StatelessWidget {
                     Text(
                       'Record how the sea within you feels today',
                       style: AppTextStyles.caption.copyWith(
-                        color: AppColors.tealTint,
+                        color: AppColors.white,
                       ),
                     ),
                   ],

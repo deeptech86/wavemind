@@ -111,7 +111,7 @@ class _Header extends StatelessWidget {
           Text(
             'Private frequency for passing sailors',
             textAlign: TextAlign.center,
-            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.bodyMist),
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.white),
           ),
         ],
       ),
@@ -140,7 +140,7 @@ class _SafetyCard extends StatelessWidget {
               'Safe Harbor Chat — Your identity stays private. Keep '
               'conversations supportive.',
               style: AppTextStyles.caption.copyWith(
-                color: AppColors.bodyMist,
+                color: AppColors.white,
                 height: 1.4,
               ),
             ),

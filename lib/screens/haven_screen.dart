@@ -460,7 +460,7 @@ class _TidalBreathHero extends StatelessWidget {
           Text(
             'Ride the rhythmic ocean swell to down-regulate your vagus nerve.',
             textAlign: TextAlign.center,
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.tealTint),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.white),
           ),
           const SizedBox(height: 16),
           _MiniOrb(),

@@ -185,7 +185,7 @@ class _KnotIntro extends StatelessWidget {
             'Run the rope through every loop — in any order you like — then '
             'close it back onto the anchor. Keep the line clean: if a new pass '
             'crosses one already run, the knot fouls and you lay a fresh one.',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.bodyMist),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.white),
           ),
         ],
       ),
@@ -612,7 +612,7 @@ class _KnotSecuredBanner extends StatelessWidget {
                   'A clean, non-crossing loop through every point. '
                   'Cast off and tie another.',
                   style:
-                      AppTextStyles.caption.copyWith(color: AppColors.cream),
+                      AppTextStyles.caption.copyWith(color: AppColors.white),
                 ),
               ],
             ),
@@ -653,7 +653,7 @@ class _KnotFouledBanner extends StatelessWidget {
                   'That pass crossed a line already run. Shake it out and '
                   'try a fresh lay.',
                   style:
-                      AppTextStyles.caption.copyWith(color: AppColors.cream),
+                      AppTextStyles.caption.copyWith(color: AppColors.white),
                 ),
               ],
             ),

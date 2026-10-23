@@ -1280,7 +1280,7 @@ class _ChapterCard extends StatelessWidget {
               Text(
                 story.excerpt[i],
                 style: AppTextStyles.body.copyWith(
-                  color: i == 0 ? AppColors.cream : AppColors.bodyMist,
+                  color: AppColors.white,
                   fontStyle: i == 0 ? FontStyle.italic : FontStyle.normal,
                 ),
               ),

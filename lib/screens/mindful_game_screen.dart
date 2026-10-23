@@ -81,7 +81,7 @@ class _Header extends StatelessWidget {
         Text(
           'Soothing ocean pairs to quiet the mind',
           textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.bodyMist),
+          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.white),
         ),
       ],
     );

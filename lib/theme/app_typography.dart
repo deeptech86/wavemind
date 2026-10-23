@@ -120,21 +120,21 @@ abstract final class AppTextStyles {
     fontSize: 15,
     fontWeight: FontWeight.w400,
     height: 1.5,
-    color: AppColors.bodyMist,
+    color: AppColors.white,
   );
 
   /// Greeting / medium body — Figtree Regular 14.
   static TextStyle bodyMedium = GoogleFonts.figtree(
     fontSize: 14,
     fontWeight: FontWeight.w400,
-    color: AppColors.muted,
+    color: AppColors.white,
   );
 
   /// Slightly larger body copy — Figtree Regular 16.
   static TextStyle bodyRegular = GoogleFonts.figtree(
     fontSize: 16,
     fontWeight: FontWeight.w400,
-    color: AppColors.cream,
+    color: AppColors.white,
   );
 
   /// Emphasised 14px label, e.g. list-item title — Figtree SemiBold 14.
@@ -162,14 +162,14 @@ abstract final class AppTextStyles {
   static TextStyle bodySmall = GoogleFonts.figtree(
     fontSize: 13,
     fontWeight: FontWeight.w400,
-    color: AppColors.muted,
+    color: AppColors.white,
   );
 
   /// Caption / subtitle — Figtree Regular 12.
   static TextStyle caption = GoogleFonts.figtree(
     fontSize: 12,
     fontWeight: FontWeight.w400,
-    color: AppColors.muted,
+    color: AppColors.white,
   );
 
   /// Emphasised inline label, e.g. "Day 42 at Sea" — Figtree Bold 15.
