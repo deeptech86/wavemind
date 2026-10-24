@@ -606,50 +606,11 @@ class _VoyageMilestoneCardState extends State<_VoyageMilestoneCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('VOYAGE MILESTONE', style: AppTextStyles.badge),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${status.origin} to ${status.destination}',
-                      style: AppTextStyles.titleMedium,
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.glassFill,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.flag_outlined,
-                      size: 14,
-                      color: AppColors.sand,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Leg 2',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.sand,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Text('VOYAGE MILESTONE', style: AppTextStyles.badge),
+          const SizedBox(height: 4),
+          Text(
+            '${status.origin} to ${status.destination}',
+            style: AppTextStyles.titleMedium,
           ),
           const SizedBox(height: 12),
           Text(
