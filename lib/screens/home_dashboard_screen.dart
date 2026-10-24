@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../data/models/voyage_status.dart';
 import '../data/wellness_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
+import '../widgets/auth_form.dart';
 import '../widgets/tide_bottom_nav.dart';
 import 'community_connect_screen.dart';
 import 'haven_screen.dart';
@@ -70,7 +72,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _DashboardHeader(),
+              _DashboardHeader(repository: _repo),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
@@ -120,7 +122,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 // ---------------------------------------------------------------------------
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader();
+  const _DashboardHeader({required this.repository});
+
+  final WellnessRepository repository;
 
   @override
   Widget build(BuildContext context) {
@@ -141,10 +145,10 @@ class _DashboardHeader extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              _UserProfileBar(),
-              SizedBox(height: 16),
-              _VoyageBanner(),
+            children: [
+              const _UserProfileBar(),
+              const SizedBox(height: 16),
+              _VoyageBanner(repository: repository),
             ],
           ),
         ),
@@ -201,11 +205,116 @@ class _UserProfileBar extends StatelessWidget {
   }
 }
 
-class _VoyageBanner extends StatelessWidget {
-  const _VoyageBanner();
+/// The Helm "Voyage Details" card.
+///
+/// First run (no saved status) always opens on the ask-form: Docked or
+/// Voyage, and if Voyage, From/To/Days Remaining. Once saved, the form
+/// collapses to a one-line summary + Edit button; tapping Edit re-opens the
+/// form pre-filled with the current values. A voyage's countdown only ever
+/// goes down from the days-remaining value entered at save time — it is not
+/// derived from a start date — and auto-reads as Docked once it hits 0.
+class _VoyageBanner extends StatefulWidget {
+  const _VoyageBanner({required this.repository});
+
+  final WellnessRepository repository;
+
+  @override
+  State<_VoyageBanner> createState() => _VoyageBannerState();
+}
+
+class _VoyageBannerState extends State<_VoyageBanner> {
+  bool _loaded = false;
+  bool _editing = false;
+  VoyageStatus? _status;
+
+  VoyageState _formState = VoyageState.docked;
+  final _originCtrl = TextEditingController();
+  final _destinationCtrl = TextEditingController();
+  final _daysCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    // Keep the Save button's enabled state in sync as the sailor types.
+    for (final c in [_originCtrl, _destinationCtrl, _daysCtrl]) {
+      c.addListener(_onFormFieldChanged);
+    }
+  }
+
+  void _onFormFieldChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _originCtrl.dispose();
+    _destinationCtrl.dispose();
+    _daysCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final status = await widget.repository.voyageStatus();
+    if (!mounted) return;
+    setState(() {
+      _status = status;
+      _loaded = true;
+      _editing = status == null; // first run: go straight to the ask-form.
+    });
+  }
+
+  void _startEdit() {
+    final current = _status;
+    final effective = current?.effectiveState();
+    setState(() {
+      _formState = effective ?? VoyageState.docked;
+      _originCtrl.text = current?.origin ?? '';
+      _destinationCtrl.text = current?.destination ?? '';
+      final remaining = current?.daysRemaining();
+      _daysCtrl.text = remaining != null && remaining > 0
+          ? '$remaining'
+          : '';
+      _editing = true;
+    });
+  }
+
+  bool get _canSave {
+    if (_formState == VoyageState.docked) return true;
+    final days = int.tryParse(_daysCtrl.text.trim());
+    return _originCtrl.text.trim().isNotEmpty &&
+        _destinationCtrl.text.trim().isNotEmpty &&
+        days != null &&
+        days > 0;
+  }
+
+  Future<void> _save() async {
+    final isVoyage = _formState == VoyageState.voyage;
+    final status = VoyageStatus(
+      state: _formState,
+      origin: isVoyage ? _originCtrl.text.trim() : null,
+      destination: isVoyage ? _destinationCtrl.text.trim() : null,
+      totalDays: isVoyage ? int.tryParse(_daysCtrl.text.trim()) : null,
+      anchoredAt: isVoyage ? DateTime.now() : null,
+    );
+    await widget.repository.saveVoyageStatus(status);
+    if (!mounted) return;
+    setState(() {
+      _status = status;
+      _editing = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (!_loaded) {
+      return Container(
+        width: double.infinity,
+        height: 76,
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+        ),
+      );
+    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -213,24 +322,173 @@ class _VoyageBanner extends StatelessWidget {
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(AppTheme.radiusTile),
       ),
-      child: Row(
-        children: [
-          SvgPicture.asset(AppAssets.compass, width: 24, height: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Day 42 at Sea', style: AppTextStyles.labelStrong),
-                const SizedBox(height: 2),
-                Text(
-                  'Voyage: Yokohama to Valparaiso',
-                  style: AppTextStyles.caption,
+      child: _editing ? _buildForm() : _buildSummary(),
+    );
+  }
+
+  Widget _buildSummary() {
+    final status = _status!;
+    final effective = status.effectiveState();
+    final isVoyage = effective == VoyageState.voyage;
+    final remaining = status.daysRemaining() ?? 0;
+    return Row(
+      children: [
+        SvgPicture.asset(AppAssets.compass, width: 24, height: 24),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isVoyage
+                    ? '$remaining ${remaining == 1 ? 'Day' : 'Days'} Remaining'
+                    : 'Docked',
+                style: AppTextStyles.labelStrong,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                isVoyage
+                    ? 'Voyage: ${status.origin} to ${status.destination}'
+                    : 'No active voyage',
+                style: AppTextStyles.caption,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Material(
+          color: AppColors.seafoamFaint,
+          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            onTap: _startEdit,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              child: Text(
+                'Edit',
+                style: TextStyle(
+                  color: AppColors.seafoam,
+                  fontWeight: FontWeight.w700,
                 ),
-              ],
+              ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            SvgPicture.asset(AppAssets.compass, width: 20, height: 20),
+            const SizedBox(width: 10),
+            Text('Voyage Details', style: AppTextStyles.labelStrong),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _VoyageStateOption(
+                label: 'Docked',
+                selected: _formState == VoyageState.docked,
+                onTap: () => setState(() => _formState = VoyageState.docked),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _VoyageStateOption(
+                label: 'Voyage',
+                selected: _formState == VoyageState.voyage,
+                onTap: () => setState(() => _formState = VoyageState.voyage),
+              ),
+            ),
+          ],
+        ),
+        if (_formState == VoyageState.voyage) ...[
+          const SizedBox(height: 12),
+          AuthTextField(
+            label: 'From',
+            controller: _originCtrl,
+            hint: 'e.g. Yokohama',
+            textCapitalizationWords: true,
+            fillColor: AppColors.glassFill,
+          ),
+          const SizedBox(height: 10),
+          AuthTextField(
+            label: 'To',
+            controller: _destinationCtrl,
+            hint: 'e.g. Valparaiso',
+            textCapitalizationWords: true,
+            fillColor: AppColors.glassFill,
+          ),
+          const SizedBox(height: 10),
+          AuthTextField(
+            label: 'Days Remaining',
+            controller: _daysCtrl,
+            hint: 'e.g. 21',
+            keyboardType: TextInputType.number,
+            fillColor: AppColors.glassFill,
+          ),
         ],
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: AuthPrimaryButton(
+            label: 'Save',
+            busy: false,
+            onTap: _canSave ? _save : null,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One Docked/Voyage choice chip in the Voyage Details form.
+class _VoyageStateOption extends StatelessWidget {
+  const _VoyageStateOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.seafoamFaint : AppColors.glassFill,
+      borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                size: 18,
+                color: selected ? AppColors.seafoam : AppColors.muted,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: AppTextStyles.bodyStrong.copyWith(
+                  color: selected ? AppColors.seafoam : AppColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

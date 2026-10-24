@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:tidewell_app/core/db/app_database.dart';
 import 'package:tidewell_app/data/models/knot_event.dart';
+import 'package:tidewell_app/data/models/voyage_status.dart';
 import 'package:tidewell_app/data/wellness_repository.dart';
 
 /// Exercises [WellnessRepository] against a real, in-process SQLite database
@@ -22,6 +23,7 @@ void main() {
     repo = WellnessRepository();
     final db = await AppDatabase.instance.database;
     await db.delete('knot_events');
+    await db.delete('voyage_status');
   });
 
   tearDownAll(() async {
@@ -64,6 +66,53 @@ void main() {
       );
       expect(breathing.knots, KnotEventType.breathingSession.knots); // 50
       expect(health.knots, 500);
+    });
+  });
+
+  group('voyageStatus', () {
+    test('is null before anything has ever been saved', () async {
+      expect(await repo.voyageStatus(), isNull);
+    });
+
+    test('round-trips a saved voyage against the real schema', () async {
+      final saved = VoyageStatus(
+        state: VoyageState.voyage,
+        origin: 'Yokohama',
+        destination: 'Valparaiso',
+        totalDays: 21,
+        anchoredAt: DateTime(2026, 3, 5),
+      );
+      await repo.saveVoyageStatus(saved);
+
+      final loaded = await repo.voyageStatus();
+      expect(loaded, isNotNull);
+      expect(loaded!.state, VoyageState.voyage);
+      expect(loaded.origin, 'Yokohama');
+      expect(loaded.destination, 'Valparaiso');
+      expect(loaded.totalDays, 21);
+      expect(loaded.anchoredAt, DateTime(2026, 3, 5));
+    });
+
+    test('a second save replaces the first row rather than inserting a new one',
+        () async {
+      await repo.saveVoyageStatus(
+        VoyageStatus(
+          state: VoyageState.voyage,
+          origin: 'Yokohama',
+          destination: 'Valparaiso',
+          totalDays: 21,
+          anchoredAt: DateTime(2026, 3, 5),
+        ),
+      );
+      await repo.saveVoyageStatus(const VoyageStatus(state: VoyageState.docked));
+
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query('voyage_status');
+      expect(rows, hasLength(1));
+
+      final loaded = await repo.voyageStatus();
+      expect(loaded!.state, VoyageState.docked);
+      expect(loaded.origin, isNull);
     });
   });
 }

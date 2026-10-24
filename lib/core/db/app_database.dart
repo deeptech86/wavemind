@@ -22,9 +22,10 @@ class AppDatabase {
 
   /// v2 adds the content-catalog cache tables (`catalog_stories`,
   /// `catalog_sounds`, `catalog_featured_games`) for the schedule-controlled
-  /// story / soundscape rotation. The four original wellness tables are
+  /// story / soundscape rotation. v3 adds `voyage_status`, the single-row
+  /// Helm voyage-details setting. The four original wellness tables are
   /// unchanged.
-  static const int _version = 2;
+  static const int _version = 3;
 
   Database? _db;
 
@@ -46,6 +47,7 @@ class AppDatabase {
   Future<void> _onCreate(Database db, int version) async {
     await _createWellnessTables(db);
     await _createCatalogTables(db);
+    await _createVoyageTable(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -53,6 +55,10 @@ class AppDatabase {
     // this idempotent if the path is ever re-run.
     if (oldVersion < 2) {
       await _createCatalogTables(db);
+    }
+    // v2 -> v3: add the single-row voyage-status setting.
+    if (oldVersion < 3) {
+      await _createVoyageTable(db);
     }
   }
 
@@ -141,6 +147,22 @@ class AppDatabase {
         active          INTEGER NOT NULL DEFAULT 0,
         effective_from TEXT NOT NULL DEFAULT '',
         sort_order     INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  /// Single-row setting for the Helm "Voyage Details" card. `id` is pinned
+  /// to 1 and every save is an upsert (`ConflictAlgorithm.replace`) — there
+  /// is only ever one current voyage status.
+  Future<void> _createVoyageTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS voyage_status (
+        id           INTEGER PRIMARY KEY CHECK (id = 1),
+        status       TEXT NOT NULL,
+        origin       TEXT,
+        destination  TEXT,
+        total_days   INTEGER,
+        anchored_at  TEXT
       )
     ''');
   }

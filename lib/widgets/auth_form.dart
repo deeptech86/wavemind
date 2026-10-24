@@ -24,6 +24,7 @@ class AuthTextField extends StatelessWidget {
     this.textCapitalizationWords = false,
     this.validator,
     this.onFieldSubmitted,
+    this.fillColor = AppColors.cardSurface,
   });
 
   final String label;
@@ -40,6 +41,11 @@ class AuthTextField extends StatelessWidget {
   final bool textCapitalizationWords;
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onFieldSubmitted;
+
+  /// Override when the field sits on a surface that is already
+  /// [AppColors.cardSurface] (its default), so the field stays visible
+  /// against its container instead of blending into it.
+  final Color fillColor;
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +80,7 @@ class AuthTextField extends StatelessWidget {
           decoration: InputDecoration(
             isDense: true,
             filled: true,
-            fillColor: AppColors.cardSurface,
+            fillColor: fillColor,
             hintText: hint,
             hintStyle: AppTextStyles.body.copyWith(color: AppColors.muted),
             contentPadding: const EdgeInsets.symmetric(

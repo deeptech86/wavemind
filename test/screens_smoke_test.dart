@@ -66,6 +66,50 @@ void main() {
     expect(find.text('The Lighthouse at Cape Horn'), findsNothing);
   });
 
+  testWidgets('helm voyage details starts on the ask-form with no saved status',
+      (tester) async {
+    await pumpScreen(tester, const HomeDashboardScreen());
+    await tester.pump();
+    expect(find.text('Voyage Details'), findsOneWidget);
+    expect(find.text('Docked'), findsOneWidget);
+    expect(find.text('Voyage'), findsOneWidget);
+    // Voyage-only fields stay hidden until that radio is selected.
+    expect(find.text('FROM'), findsNothing);
+  });
+
+  testWidgets('helm voyage form reveals From/To/Days when Voyage is picked',
+      (tester) async {
+    await pumpScreen(tester, const HomeDashboardScreen());
+    await tester.pump();
+    await tester.tap(find.text('Voyage'));
+    await tester.pump();
+    expect(find.text('FROM'), findsOneWidget);
+    expect(find.text('TO'), findsOneWidget);
+    expect(find.text('DAYS REMAINING'), findsOneWidget);
+  });
+
+  testWidgets('helm voyage saving Docked collapses to a summary + Edit button',
+      (tester) async {
+    await pumpScreen(tester, const HomeDashboardScreen());
+    await tester.pump();
+    await tester.tap(find.text('Save')); // Docked needs no extra fields.
+    await tester.pump();
+    expect(find.text('Voyage Details'), findsNothing);
+    expect(find.text('Docked'), findsOneWidget);
+    expect(find.text('No active voyage'), findsOneWidget);
+    expect(find.text('Edit'), findsOneWidget);
+  });
+
+  testWidgets('helm voyage Edit reopens the ask-form', (tester) async {
+    await pumpScreen(tester, const HomeDashboardScreen());
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    await tester.tap(find.text('Edit'));
+    await tester.pump();
+    expect(find.text('Voyage Details'), findsOneWidget);
+  });
+
   testWidgets('crew renders the fleet spirit tab by default', (tester) async {
     await pumpScreen(tester, const CommunityConnectScreen());
     // "Crew" appears twice: the screen header and the bottom-nav tab label.

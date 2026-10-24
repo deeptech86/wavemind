@@ -6,6 +6,7 @@ import 'models/breathing_session.dart';
 import 'models/journal_entry.dart';
 import 'models/knot_event.dart';
 import 'models/mood_check_in.dart';
+import 'models/voyage_status.dart';
 import 'wellness_stats.dart';
 
 /// Read model for the Crew "Your Contribution" card.
@@ -177,6 +178,29 @@ class WellnessRepository {
       final rows = await db.query('knot_events', orderBy: 'created_at DESC');
       return rows.map(KnotEvent.fromMap).toList();
     }, fallback: const []);
+  }
+
+  // --- Voyage status ----------------------------------------------------------
+
+  /// `null` means the sailor has never set a voyage status yet (first run).
+  Future<VoyageStatus?> voyageStatus() {
+    return _guard<VoyageStatus?>(() async {
+      final db = await _appDb.database;
+      final rows = await db.query('voyage_status', where: 'id = 1', limit: 1);
+      if (rows.isEmpty) return null;
+      return VoyageStatus.fromMap(rows.first);
+    }, fallback: null);
+  }
+
+  Future<void> saveVoyageStatus(VoyageStatus status) {
+    return _guard<void>(() async {
+      final db = await _appDb.database;
+      await db.insert(
+        'voyage_status',
+        status.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }, fallback: null);
   }
 
   // --- Composite read models ------------------------------------------------
