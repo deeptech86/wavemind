@@ -134,7 +134,7 @@ void main() {
     });
   });
 
-  group('loreForDisplay — dailyLore only as tie-breaker', () {
+  group('loreForDisplay — temporarily unrestricted for testing', () {
     StoryData story(String id) => StoryData(
           title: id,
           series: '',
@@ -165,10 +165,10 @@ void main() {
           ['a']);
     });
 
-    test('more than two active stories collapse to a daily window of two', () {
+    test('more than two active stories are all shown, not capped', () {
       final four = [story('a'), story('b'), story('c'), story('d')];
       final shown = loreForDisplay(four, DateTime(2026, 3, 5));
-      expect(shown, hasLength(2));
+      expect(shown.map((s) => s.title), ['a', 'b', 'c', 'd']);
     });
 
     test('empty source yields nothing', () {

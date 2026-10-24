@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/ambient_pulse_background.dart';
 import '../widgets/tide_bottom_nav.dart';
+import 'game_catalog.dart';
 import 'guided_breathing_screen.dart';
 import 'off_watch_games_screen.dart';
 import 'story_playback_screen.dart';
@@ -160,8 +161,8 @@ class _HavenScreenState extends State<HavenScreen> {
 
   /// Today's sleep-lore stories: the first renders as the featured card, any
   /// remaining as compact list rows. Sourced from the catalog (or bundled
-  /// fallback); [loreForDisplay] applies [dailyLore] only as a tie-breaker when
-  /// more than two stories are active.
+  /// fallback); [loreForDisplay] currently shows every active story (no
+  /// rotation cap) while content is being tested — see its doc comment.
   List<Widget> _buildTodaysLore(BuildContext context) {
     final todays = loreForDisplay(_stories, DateTime.now());
     if (todays.isEmpty) return const [];
@@ -1121,6 +1122,12 @@ class _MindGamesSection extends StatelessWidget {
 
   final VoidCallback onSeeAll;
 
+  void _openGame(BuildContext context, GameCatalogEntry game) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => game.screenBuilder()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1163,39 +1170,24 @@ class _MindGamesSection extends StatelessWidget {
         const SizedBox(height: 12),
         SizedBox(
           height: 150,
-          child: ListView(
+          // Every real game shows here — no "featured 2-3" cap — so a newly
+          // added or reworked game is immediately visible for testing.
+          child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            children: [
-              _GameCard(
-                duration: '2 min',
-                durationColor: AppColors.sand,
-                category: 'Pattern Puzzle',
-                title: 'Celestial Wayfinder',
-                subtitle: 'Polynesian star alignment puzzle',
-                icon: Icons.auto_awesome,
-                onTap: onSeeAll,
-              ),
-              const SizedBox(width: 12),
-              _GameCard(
-                duration: '5 min',
-                durationColor: AppColors.seafoam,
-                category: 'Stress Relief',
-                title: 'Knot Master 3D',
-                subtitle: 'Tactile rope detangling focus',
-                icon: Icons.gesture,
-                onTap: onSeeAll,
-              ),
-              const SizedBox(width: 12),
-              _GameCard(
-                duration: '3 min',
-                durationColor: AppColors.teal,
-                category: 'Audio Focus',
-                title: 'Sonar Echo Ping',
-                subtitle: 'Memory rhythm for post-watch drift',
-                icon: Icons.graphic_eq,
-                onTap: onSeeAll,
-              ),
-            ],
+            itemCount: gameCatalog.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, i) {
+              final game = gameCatalog[i];
+              return _GameCard(
+                badge: game.badge,
+                badgeColor: game.accent,
+                meta: game.meta,
+                title: game.title,
+                subtitle: game.description,
+                icon: game.icon,
+                onTap: () => _openGame(context, game),
+              );
+            },
           ),
         ),
       ],
@@ -1205,21 +1197,23 @@ class _MindGamesSection extends StatelessWidget {
 
 class _GameCard extends StatelessWidget {
   const _GameCard({
-    required this.duration,
-    required this.durationColor,
-    required this.category,
+    required this.badge,
+    required this.badgeColor,
+    required this.meta,
     required this.title,
     required this.subtitle,
     required this.icon,
     required this.onTap,
   });
 
-  final String duration;
-  final Color durationColor;
-  final String category;
+  final String badge;
+  final Color badgeColor;
+  final String meta;
   final String title;
   final String subtitle;
-  final IconData icon;
+
+  /// SVG asset path — matches the real games catalog's icon convention.
+  final String icon;
   final VoidCallback onTap;
 
   @override
@@ -1249,14 +1243,14 @@ class _GameCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(AppTheme.radiusPill),
                     ),
                     child: Text(
-                      duration,
-                      style: AppTextStyles.badge.copyWith(color: durationColor),
+                      badge,
+                      style: AppTextStyles.badge.copyWith(color: badgeColor),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
-                      category,
+                      meta,
                       style: AppTextStyles.caption,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1273,7 +1267,15 @@ class _GameCard extends StatelessWidget {
                     border: Border.all(color: AppColors.glassBorderSoft),
                   ),
                   child: Center(
-                    child: Icon(icon, size: 28, color: durationColor),
+                    child: SvgPicture.asset(
+                      icon,
+                      width: 28,
+                      height: 28,
+                      colorFilter: ColorFilter.mode(
+                        badgeColor,
+                        BlendMode.srcIn,
+                      ),
+                    ),
                   ),
                 ),
               ),

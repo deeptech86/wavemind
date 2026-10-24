@@ -1,43 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../core/app_assets.dart';
 import '../data/content_catalog_repository.dart';
 import '../data/models/catalog_models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/back_header.dart';
-import 'cabin_dominoes_screen.dart';
-import 'fog_signal_echo_screen.dart';
-import 'knot_master_screen.dart';
-import 'mindful_game_screen.dart';
-import 'sextant_horizon_screen.dart';
-
-/// Immutable catalog entry for one of the five built-in off-watch games. The
-/// set of games is fixed in the app; the server only controls which are
-/// *featured* this week (a spotlight, never a gate — all five stay playable).
-class _GameEntry {
-  const _GameEntry({
-    required this.key,
-    required this.icon,
-    required this.accent,
-    required this.title,
-    required this.badge,
-    required this.description,
-    required this.meta,
-    required this.ready,
-  });
-
-  final String key;
-  final String icon;
-  final Color accent;
-  final String title;
-  final String badge;
-  final String description;
-  final String meta;
-  final bool ready;
-}
+import 'game_catalog.dart';
 
 /// "Off-Watch Mind Games" hub (Stitch "offwatch_mind_games" redesign).
 ///
@@ -63,68 +33,9 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
   late final ContentCatalogRepository _catalog =
       widget._catalog ?? ContentCatalogRepository();
 
-  /// The five built-in games in their default catalog order.
-  static const List<_GameEntry> _games = [
-    _GameEntry(
-      key: GameKeys.calmYourWaves,
-      icon: AppAssets.waves,
-      accent: AppColors.seafoam,
-      title: 'Calm Your Waves',
-      badge: 'Ready',
-      description:
-          'Match soothing ocean pairs to quiet the mind between watches.',
-      meta: '2-4m • Memory match',
-      ready: true,
-    ),
-    _GameEntry(
-      key: GameKeys.knotMaster,
-      icon: AppAssets.anchor,
-      accent: AppColors.teal,
-      title: 'Knot Master 3D',
-      badge: 'Ready',
-      description:
-          'Run the rope through every loop and close it clean — no crossing '
-          'lines — with haptic feedback.',
-      meta: 'Haptics on • 4-6m',
-      ready: true,
-    ),
-    _GameEntry(
-      key: GameKeys.fogSignalEcho,
-      icon: AppAssets.cloudFog,
-      accent: AppColors.sand,
-      title: 'Fog Signal Echo',
-      badge: 'Ready',
-      description:
-          'Call-and-repeat foghorn bearings — Bow, Starboard, Stern, Port — '
-          'echoed back in a growing pattern.',
-      meta: 'Pitch signals • 5-7m',
-      ready: true,
-    ),
-    _GameEntry(
-      key: GameKeys.sextantHorizon,
-      icon: AppAssets.compass,
-      accent: AppColors.seafoam,
-      title: 'Sextant Horizon Balance',
-      badge: 'Ready',
-      description:
-          'Gentle gyroscopic horizon leveler keeping the spirit bubble '
-          'centered against swell roll.',
-      meta: 'Gyro sensory • 3-5m',
-      ready: true,
-    ),
-    _GameEntry(
-      key: GameKeys.cabinDominoes,
-      icon: AppAssets.shell,
-      accent: AppColors.sand,
-      title: 'Cabin Dominoes',
-      badge: 'Ready',
-      description:
-          'Cozy pass-and-play dominoes to challenge an off-watch crewmate on '
-          'one device, no internet.',
-      meta: 'Pass & play • 2 crew',
-      ready: true,
-    ),
-  ];
+  /// The five built-in games in their default catalog order — shared with
+  /// Haven's preview row via [gameCatalog] so they can never drift apart.
+  static const List<GameCatalogEntry> _games = gameCatalog;
 
   /// Keys spotlighted this week; empty until a sync lands (default display).
   Set<String> _featuredKeys = const {};
@@ -157,7 +68,7 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
 
   /// Games ordered featured-first (spotlight), preserving default order within
   /// each group. All five are always present.
-  List<_GameEntry> get _orderedGames {
+  List<GameCatalogEntry> get _orderedGames {
     final featured = [for (final g in _games) if (_featuredKeys.contains(g.key)) g];
     final rest = [for (final g in _games) if (!_featuredKeys.contains(g.key)) g];
     return [...featured, ...rest];
@@ -178,31 +89,14 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
       );
   }
 
-  void _openGame(BuildContext context, _GameEntry game) {
-    switch (game.key) {
-      case GameKeys.calmYourWaves:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const MindfulGameScreen()),
-        );
-      case GameKeys.knotMaster:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const KnotMasterScreen()),
-        );
-      case GameKeys.sextantHorizon:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const SextantHorizonScreen()),
-        );
-      case GameKeys.cabinDominoes:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const CabinDominoesScreen()),
-        );
-      case GameKeys.fogSignalEcho:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const FogSignalEchoScreen()),
-        );
-      default:
-        _comingSoon(context, game.title);
+  void _openGame(BuildContext context, GameCatalogEntry game) {
+    if (!game.ready) {
+      _comingSoon(context, game.title);
+      return;
     }
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => game.screenBuilder()));
   }
 
   @override

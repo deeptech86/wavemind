@@ -222,12 +222,14 @@ List<StoryData> dailyLore(
   return List.generate(n, (i) => catalog[(start + i) % catalog.length]);
 }
 
-/// Chooses which stories to surface in Haven's lore list. [dailyLore] is used
-/// only as a tie-breaker: if the (server-driven or bundled) [source] holds more
-/// than two active stories it rotates a deterministic daily window of two;
-/// otherwise every active story is shown directly, in order.
+/// Chooses which stories to surface in Haven's lore list.
+///
+/// TEMPORARILY shows every active story directly, in order — no
+/// [dailyLore] windowing — so newly added/reworked lore is immediately
+/// visible for testing rather than waiting for its day in a rotation.
+/// [dailyLore] itself is untouched; re-enable the `source.length > 2`
+/// tie-breaker below once everything is confirmed working (ask first).
 List<StoryData> loreForDisplay(List<StoryData> source, DateTime date) {
-  if (source.length > 2) return dailyLore(date, source);
   return source;
 }
 

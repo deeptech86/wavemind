@@ -263,12 +263,25 @@ void main() {
   });
 
   testWidgets('haven hub renders its sections', (tester) async {
-    await pumpScreen(tester, const HavenScreen());
+    // Wide enough that the 5-card game preview row (no cap now) is fully
+    // built — ListView lazily builds only what's on/near screen.
+    await tester.binding.setSurfaceSize(const Size(1300, 874));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MaterialApp(home: HavenScreen()));
+    await tester.pump();
+
     expect(find.text('Safe Haven'), findsOneWidget);
     expect(find.text('Tidal Breath'), findsOneWidget);
     // Off-Watch Mind Games moved here, between Sleep Lore and Ambient Sounds.
     expect(find.text('OFF-WATCH MIND GAMES'), findsOneWidget);
-    expect(find.text('Celestial Wayfinder'), findsOneWidget);
+    // The preview row is driven by the real game catalog now (no static
+    // placeholder cards, no 3-card cap) — every real game shows, including
+    // the newly-built Fog Signal Echo.
+    expect(find.text('Calm Your Waves'), findsOneWidget);
+    expect(find.text('Knot Master 3D'), findsOneWidget);
+    expect(find.text('Fog Signal Echo'), findsOneWidget);
+    expect(find.text('Sextant Horizon Balance'), findsOneWidget);
+    expect(find.text('Cabin Dominoes'), findsOneWidget);
   });
 
   testWidgets('off-watch games hub renders featured + catalog', (tester) async {
