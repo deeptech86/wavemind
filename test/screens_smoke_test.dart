@@ -112,12 +112,20 @@ void main() {
 
   testWidgets('crew renders the fleet spirit tab by default', (tester) async {
     await pumpScreen(tester, const CommunityConnectScreen());
+    await tester.pump(); // let the Voyage Milestone card's async load settle
     // "Crew" appears twice: the screen header and the bottom-nav tab label.
     expect(find.text('Crew'), findsWidgets);
     expect(find.text('Fleet Spirit'), findsOneWidget);
     expect(find.text('Fleet Solidarity Log'), findsOneWidget);
     // Anchor Pool content is not shown until that tab is selected.
     expect(find.text('Cast to Fleet'), findsNothing);
+    // No voyage saved (nothing to read with no native DB in widget tests):
+    // the milestone card falls back to its docked state, not fictional stats.
+    expect(find.text('Docked'), findsOneWidget);
+    expect(
+      find.text('Set sail from the Helm to track your voyage here.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('crew tabs switch between fleet spirit and anchor pool', (

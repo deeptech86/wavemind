@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/health_data_service.dart';
+import '../data/models/voyage_status.dart';
 import '../data/wellness_repository.dart';
 import '../data/wellness_stats.dart';
 import '../theme/app_colors.dart';
@@ -494,7 +495,7 @@ class _FleetSpiritView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _VoyageMilestoneCard(),
+        _VoyageMilestoneCard(repository: repository),
         const SizedBox(height: 20),
         _ContributionCard(
           summary: summary,
@@ -512,11 +513,83 @@ class _FleetSpiritView extends StatelessWidget {
   }
 }
 
-class _VoyageMilestoneCard extends StatelessWidget {
-  const _VoyageMilestoneCard();
+/// Mirrors the same on-device [VoyageStatus] the Helm "Voyage Details" card
+/// reads/writes — the route headline and day count reflect whatever was last
+/// saved there. The rest of the card (leg badge, watch/swell stats, progress
+/// bar, NM traveled) has no real data source yet and stays illustrative, but
+/// only renders when an actual voyage is active — it has nothing to show
+/// while docked.
+class _VoyageMilestoneCard extends StatefulWidget {
+  const _VoyageMilestoneCard({required this.repository});
+
+  final WellnessRepository repository;
+
+  @override
+  State<_VoyageMilestoneCard> createState() => _VoyageMilestoneCardState();
+}
+
+class _VoyageMilestoneCardState extends State<_VoyageMilestoneCard> {
+  bool _loaded = false;
+  VoyageStatus? _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final status = await widget.repository.voyageStatus();
+    if (!mounted) return;
+    setState(() {
+      _status = status;
+      _loaded = true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (!_loaded) {
+      return Container(
+        width: double.infinity,
+        height: 76,
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        ),
+      );
+    }
+
+    final status = _status;
+    final isVoyage =
+        status != null && status.effectiveState() == VoyageState.voyage;
+
+    if (!isVoyage) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('VOYAGE MILESTONE', style: AppTextStyles.badge),
+            const SizedBox(height: 4),
+            Text('Docked', style: AppTextStyles.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Set sail from the Helm to track your voyage here.',
+              style: AppTextStyles.bodySmall,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final remaining = status.daysRemaining() ?? 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -537,7 +610,7 @@ class _VoyageMilestoneCard extends StatelessWidget {
                     Text('VOYAGE MILESTONE', style: AppTextStyles.badge),
                     const SizedBox(height: 4),
                     Text(
-                      'Yokohama to Valparaiso',
+                      '${status.origin} to ${status.destination}',
                       style: AppTextStyles.titleMedium,
                     ),
                   ],
@@ -626,7 +699,7 @@ class _VoyageMilestoneCard extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Day 42 at Sea',
+                  '$remaining ${remaining == 1 ? 'Day' : 'Days'} Remaining',
                   style: AppTextStyles.caption,
                   overflow: TextOverflow.ellipsis,
                 ),

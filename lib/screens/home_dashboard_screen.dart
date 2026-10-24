@@ -69,12 +69,16 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         ),
         child: SafeArea(
           bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _DashboardHeader(repository: _repo),
-              Expanded(
-                child: SingleChildScrollView(
+          // The whole page scrolls as one unit (not just the lower section)
+          // so a growing card up top — e.g. the Voyage Details form opening
+          // its From/To/Days fields under the keyboard — can never overflow
+          // a fixed-height header; it just scrolls into view instead.
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DashboardHeader(repository: _repo),
+                Padding(
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,8 +112,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
