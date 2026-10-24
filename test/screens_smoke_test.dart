@@ -58,6 +58,8 @@ void main() {
     await tester.pump(); // let the (gracefully-degrading) summary load settle
     expect(find.text('FLEET STANDING'), findsOneWidget);
     expect(find.text('0 Fleet Knots'), findsOneWidget); // empty ledger default
+    // Last among the 4 fixed mock competitors with 0 knots.
+    expect(find.text('Fleet Rank #5'), findsOneWidget);
     // The removed Off-Watch Story banner must be gone from Helm.
     expect(find.text('OFF-WATCH STORY'), findsNothing);
     expect(find.text('The Lighthouse at Cape Horn'), findsNothing);
@@ -93,6 +95,9 @@ void main() {
     expect(find.text('Fleet Solidarity Log'), findsOneWidget);
     expect(find.text('Bosun Liam S.'), findsOneWidget);
     expect(find.text('YOUR CONTRIBUTION'), findsOneWidget);
+    // Rank badge sits alongside the streak/sea-logs badges and the sync
+    // button in a single horizontal Wrap, not stacked below them.
+    expect(find.text('Fleet Rank #5'), findsOneWidget);
   });
 
   testWidgets('haven hub renders its sections', (tester) async {

@@ -9,6 +9,13 @@ import '../theme/app_typography.dart';
 import '../widgets/tide_bottom_nav.dart';
 import 'anonymous_chat_screen.dart';
 
+/// The user's live rank among the fixed mock competitor roster, derived from
+/// their real Fleet Knots total. Exposed (rather than the roster itself) so
+/// other screens — e.g. Helm's Fleet Standing banner — can show the same rank
+/// without duplicating or exposing the mock leaderboard data.
+int currentFleetRank(int totalKnots) =>
+    WellnessStats.rankAmong(totalKnots, _Leaderboard.competitorKnots);
+
 /// "Crew" screen (Stitch "crew_fleet_leaderboard" redesign).
 ///
 /// A two-part destination behind a segmented control:
@@ -483,12 +490,7 @@ class _FleetSpiritView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The user's live rank among the (static) mock competitors, derived from
-    // their real Fleet Knots total.
-    final rank = WellnessStats.rankAmong(
-      summary.totalKnots,
-      _Leaderboard.competitorKnots,
-    );
+    final rank = currentFleetRank(summary.totalKnots);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -737,12 +739,17 @@ class _ContributionCard extends StatelessWidget {
                 label: '${summary.seaLogsFiled} Sea Logs Filed',
                 color: AppColors.sand,
               ),
+              _KnotBadge(
+                icon: Icons.military_tech,
+                label: 'Fleet Rank #$rank',
+                color: AppColors.cream,
+              ),
+              _HealthSyncButton(
+                repository: repository,
+                healthService: healthService,
+                onSynced: onSynced,
+              ),
             ],
-          ),
-          _HealthSyncButton(
-            repository: repository,
-            healthService: healthService,
-            onSynced: onSynced,
           ),
         ],
       ),
@@ -886,47 +893,37 @@ class _HealthSyncButtonState extends State<_HealthSyncButton> {
     if (_phase == _SyncPhase.unsupported) return const SizedBox.shrink();
 
     final syncing = _phase == _SyncPhase.syncing;
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Material(
-          color: AppColors.seafoamFaint,
-          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-            onTap: syncing ? null : _sync,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (syncing)
-                    const SizedBox(
-                      width: 15,
-                      height: 15,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.seafoam,
-                      ),
-                    )
-                  else
-                    const Icon(
-                      Icons.sync,
-                      size: 16,
-                      color: AppColors.seafoam,
-                    ),
-                  const SizedBox(width: 8),
-                  Text(
-                    syncing ? 'Syncing…' : 'Sync Watch Data',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.seafoam,
-                      fontWeight: FontWeight.w700,
-                    ),
+    return Material(
+      color: AppColors.seafoamFaint,
+      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        onTap: syncing ? null : _sync,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (syncing)
+                const SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.seafoam,
                   ),
-                ],
+                )
+              else
+                const Icon(Icons.sync, size: 16, color: AppColors.seafoam),
+              const SizedBox(width: 8),
+              Text(
+                syncing ? 'Syncing…' : 'Sync Watch Data',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.seafoam,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

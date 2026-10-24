@@ -72,6 +72,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     children: [
                       _LeaderboardScoreBanner(
                         totalKnots: _summary.totalKnots,
+                        rank: currentFleetRank(_summary.totalKnots),
                         onTap: () => _open(
                           context,
                           const CommunityConnectScreen(
@@ -236,9 +237,14 @@ class _VoyageBanner extends StatelessWidget {
 /// user's real Fleet Knots total and deep-links straight into the Fleet Spirit
 /// leaderboard tab on Crew.
 class _LeaderboardScoreBanner extends StatelessWidget {
-  const _LeaderboardScoreBanner({required this.totalKnots, required this.onTap});
+  const _LeaderboardScoreBanner({
+    required this.totalKnots,
+    required this.rank,
+    required this.onTap,
+  });
 
   final int totalKnots;
+  final int rank;
   final VoidCallback onTap;
 
   @override
@@ -285,6 +291,14 @@ class _LeaderboardScoreBanner extends StatelessWidget {
                     Text(
                       '$totalKnots Fleet Knots',
                       style: AppTextStyles.cardTitleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Fleet Rank #$rank',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.seafoam,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
