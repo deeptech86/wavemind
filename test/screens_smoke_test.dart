@@ -72,6 +72,9 @@ void main() {
     await pumpScreen(tester, const HavenScreen());
     expect(find.text('Safe Haven'), findsOneWidget);
     expect(find.text('Tidal Breath'), findsOneWidget);
+    // Off-Watch Mind Games moved here, between Sleep Lore and Ambient Sounds.
+    expect(find.text('OFF-WATCH MIND GAMES'), findsOneWidget);
+    expect(find.text('Celestial Wayfinder'), findsOneWidget);
   });
 
   testWidgets('off-watch games hub renders featured + catalog', (tester) async {

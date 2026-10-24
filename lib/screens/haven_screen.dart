@@ -11,6 +11,7 @@ import '../theme/app_typography.dart';
 import '../widgets/ambient_pulse_background.dart';
 import '../widgets/tide_bottom_nav.dart';
 import 'guided_breathing_screen.dart';
+import 'off_watch_games_screen.dart';
 import 'story_playback_screen.dart';
 
 /// "Safe Haven" hub (Stitch "haven_calming_drills" redesign).
@@ -254,6 +255,14 @@ class _HavenScreenState extends State<HavenScreen> {
                       ),
                       const SizedBox(height: 12),
                       ..._buildTodaysLore(context),
+                      const SizedBox(height: 24),
+                      _MindGamesSection(
+                        onSeeAll: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const OffWatchGamesScreen(),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 24),
                       const _SectionHeader(
                         title: 'Ambient Cabin Soundscapes',
@@ -1095,6 +1104,193 @@ class _SoundTile extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Off-Watch Mind Games (moved here from Helm — sits between Sleep Lore and
+// Ambient Cabin Soundscapes)
+// ---------------------------------------------------------------------------
+
+class _MindGamesSection extends StatelessWidget {
+  const _MindGamesSection({required this.onSeeAll});
+
+  final VoidCallback onSeeAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'OFF-WATCH MIND GAMES',
+                    style: AppTextStyles.titleMedium.copyWith(
+                      color: AppColors.cream,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tactile cognitive focus & sensory decompression',
+                    style: AppTextStyles.caption,
+                  ),
+                ],
+              ),
+            ),
+            InkWell(
+              onTap: onSeeAll,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Text(
+                  'See All',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.seafoam),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 150,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _GameCard(
+                duration: '2 min',
+                durationColor: AppColors.sand,
+                category: 'Pattern Puzzle',
+                title: 'Celestial Wayfinder',
+                subtitle: 'Polynesian star alignment puzzle',
+                icon: Icons.auto_awesome,
+                onTap: onSeeAll,
+              ),
+              const SizedBox(width: 12),
+              _GameCard(
+                duration: '5 min',
+                durationColor: AppColors.seafoam,
+                category: 'Stress Relief',
+                title: 'Knot Master 3D',
+                subtitle: 'Tactile rope detangling focus',
+                icon: Icons.gesture,
+                onTap: onSeeAll,
+              ),
+              const SizedBox(width: 12),
+              _GameCard(
+                duration: '3 min',
+                durationColor: AppColors.teal,
+                category: 'Audio Focus',
+                title: 'Sonar Echo Ping',
+                subtitle: 'Memory rhythm for post-watch drift',
+                icon: Icons.graphic_eq,
+                onTap: onSeeAll,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GameCard extends StatelessWidget {
+  const _GameCard({
+    required this.duration,
+    required this.durationColor,
+    required this.category,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String duration;
+  final Color durationColor;
+  final String category;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.cardSurface,
+      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        child: Container(
+          width: 208,
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.glassFill,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    ),
+                    child: Text(
+                      duration,
+                      style: AppTextStyles.badge.copyWith(color: durationColor),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      category,
+                      style: AppTextStyles.caption,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppColors.deepNavy,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+                    border: Border.all(color: AppColors.glassBorderSoft),
+                  ),
+                  child: Center(
+                    child: Icon(icon, size: 28, color: durationColor),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: AppTextStyles.cardTitleSmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: AppTextStyles.caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
       ),
