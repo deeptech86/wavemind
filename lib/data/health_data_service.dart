@@ -187,6 +187,25 @@ class HealthDataService {
     }
   }
 
+  /// Converts a live [HealthSnapshot] into Fleet Knots points for a manual
+  /// sync. Pure function (no platform channel), exposed for unit testing.
+  ///
+  /// Formula (client sample: "1000 steps = 100 points, 8 hours sleep = 100
+  /// points"), applied as consistent floor-blocks so partial blocks don't
+  /// count:
+  ///   stepsPoints = (steps ~/ 1000) * 100
+  ///   sleepPoints = (sleepMinutes ~/ 480) * 100   // 480 min == 8h
+  ///   total       = stepsPoints + sleepPoints
+  ///
+  /// A null/missing metric contributes 0 rather than erroring.
+  static int pointsForSync(HealthSnapshot snapshot) {
+    final steps = snapshot.steps ?? 0;
+    final sleepMinutes = snapshot.sleep?.inMinutes ?? 0;
+    final stepsPoints = (steps ~/ 1000) * 100;
+    final sleepPoints = (sleepMinutes ~/ 480) * 100;
+    return stepsPoints + sleepPoints;
+  }
+
   /// Formats a sleep [Duration] as a compact "7h 42m" label. Pure function,
   /// exposed for unit testing (no platform channel involved).
   static String formatSleepDuration(Duration duration) {

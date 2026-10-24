@@ -11,10 +11,17 @@
 ///                       the closest written/reflective action to composing a
 ///                       float-bottle message; +30/+50 are literally mood/breath)
 ///   - breathing session -> breath routine    (+50, a direct match)
+///
+/// [healthSync] is different in kind from the three above: it is awarded from a
+/// manual watch/health sync and its point amount **varies per sync** (derived
+/// live from steps + sleep). Its enum-level [knots] is therefore a nominal 0 —
+/// the real amount is always passed explicitly at insert time
+/// (see `WellnessRepository.recordHealthSync`), never read from here.
 enum KnotEventType {
   moodCheckIn(key: 'mood_check_in', knots: 30),
   journalEntry(key: 'journal_entry', knots: 40),
-  breathingSession(key: 'breathing_session', knots: 50);
+  breathingSession(key: 'breathing_session', knots: 50),
+  healthSync(key: 'health_sync', knots: 0);
 
   const KnotEventType({required this.key, required this.knots});
 

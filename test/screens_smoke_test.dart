@@ -52,12 +52,25 @@ void main() {
     expect(find.text('DAILY SEAPROMPT'), findsOneWidget);
   });
 
+  testWidgets('helm shows the fleet standing banner (not the old story promo)',
+      (tester) async {
+    await pumpScreen(tester, const HomeDashboardScreen());
+    await tester.pump(); // let the (gracefully-degrading) summary load settle
+    expect(find.text('FLEET STANDING'), findsOneWidget);
+    expect(find.text('0 Fleet Knots'), findsOneWidget); // empty ledger default
+    // The removed Off-Watch Story banner must be gone from Helm.
+    expect(find.text('OFF-WATCH STORY'), findsNothing);
+    expect(find.text('The Lighthouse at Cape Horn'), findsNothing);
+  });
+
   testWidgets('crew renders the anchor pool tab by default', (tester) async {
     await pumpScreen(tester, const CommunityConnectScreen());
     // "Crew" appears twice: the screen header and the bottom-nav tab label.
     expect(find.text('Crew'), findsWidgets);
     expect(find.text('Anchor Pool'), findsOneWidget);
     expect(find.text('Cast to Fleet'), findsOneWidget);
+    // Fleet Spirit content is not shown until that tab is selected.
+    expect(find.text('Fleet Solidarity Log'), findsNothing);
   });
 
   testWidgets('crew fleet spirit tab reveals the leaderboard', (tester) async {
@@ -66,6 +79,20 @@ void main() {
     await tester.pump();
     expect(find.text('Fleet Solidarity Log'), findsOneWidget);
     expect(find.text('Bosun Liam S.'), findsOneWidget);
+  });
+
+  testWidgets('crew opens directly on Fleet Spirit via initialTab', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      const CommunityConnectScreen(initialTab: CrewTab.fleetSpirit),
+    );
+    await tester.pump();
+    // Lands on the leaderboard immediately — no tab tap required.
+    expect(find.text('Fleet Solidarity Log'), findsOneWidget);
+    expect(find.text('Bosun Liam S.'), findsOneWidget);
+    expect(find.text('YOUR CONTRIBUTION'), findsOneWidget);
   });
 
   testWidgets('haven hub renders its sections', (tester) async {

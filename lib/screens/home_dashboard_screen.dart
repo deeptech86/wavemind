@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../data/wellness_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -10,16 +11,43 @@ import 'community_connect_screen.dart';
 import 'haven_screen.dart';
 import 'journal_entry_screen.dart';
 import 'profile_screen.dart';
-import 'story_playback_screen.dart';
 import 'weekly_insights_screen.dart';
 
 /// Main app dashboard shown after onboarding — the "Helm" (Stitch
 /// "helm_dashboard" redesign).
-class HomeDashboardScreen extends StatelessWidget {
-  const HomeDashboardScreen({super.key});
+class HomeDashboardScreen extends StatefulWidget {
+  const HomeDashboardScreen({super.key, WellnessRepository? repository})
+    : _repository = repository;
 
-  static void _open(BuildContext context, Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+  /// Optional injection point for tests; defaults to the shared on-device repo.
+  final WellnessRepository? _repository;
+
+  @override
+  State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
+}
+
+class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
+  late final WellnessRepository _repo =
+      widget._repository ?? WellnessRepository();
+
+  ContributionSummary _summary = ContributionSummary.empty;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
+    final summary = await _repo.contributionSummary();
+    if (!mounted) return;
+    setState(() => _summary = summary);
+  }
+
+  void _open(BuildContext context, Widget screen) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override
@@ -42,11 +70,12 @@ class HomeDashboardScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _StoryPromoBanner(
+                      _LeaderboardScoreBanner(
+                        totalKnots: _summary.totalKnots,
                         onTap: () => _open(
                           context,
-                          const StoryPlaybackScreen(
-                            story: SeaStories.lighthouse,
+                          const CommunityConnectScreen(
+                            initialTab: CrewTab.fleetSpirit,
                           ),
                         ),
                       ),
@@ -199,12 +228,17 @@ class _VoyageBanner extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Off-Watch Story promo banner
+// Fleet Standing leaderboard-score banner
 // ---------------------------------------------------------------------------
 
-class _StoryPromoBanner extends StatelessWidget {
-  const _StoryPromoBanner({required this.onTap});
+/// Live Fleet Knots score card. Reuses the former story banner's visual
+/// language (card surface, icon-chip + text + trailing circle) but surfaces the
+/// user's real Fleet Knots total and deep-links straight into the Fleet Spirit
+/// leaderboard tab on Crew.
+class _LeaderboardScoreBanner extends StatelessWidget {
+  const _LeaderboardScoreBanner({required this.totalKnots, required this.onTap});
 
+  final int totalKnots;
   final VoidCallback onTap;
 
   @override
@@ -228,14 +262,11 @@ class _StoryPromoBanner extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppTheme.radiusTile),
                   border: Border.all(color: AppColors.tealBorder),
                 ),
-                child: SvgPicture.asset(
-                  AppAssets.moonStar,
-                  width: 22,
-                  height: 22,
-                  colorFilter: const ColorFilter.mode(
-                    AppColors.seafoam,
-                    BlendMode.srcIn,
-                  ),
+                // Matches the Fleet Spirit tab icon in community_connect_screen.
+                child: const Icon(
+                  Icons.military_tech,
+                  size: 24,
+                  color: AppColors.sand,
                 ),
               ),
               const SizedBox(width: 12),
@@ -243,24 +274,16 @@ class _StoryPromoBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'OFF-WATCH STORY',
-                            style: AppTextStyles.badge.copyWith(
-                              color: AppColors.sand,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text('14 min', style: AppTextStyles.caption),
-                      ],
+                    Text(
+                      'FLEET STANDING',
+                      style: AppTextStyles.badge.copyWith(
+                        color: AppColors.sand,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'The Lighthouse at Cape Horn',
+                      '$totalKnots Fleet Knots',
                       style: AppTextStyles.cardTitleSmall,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -277,8 +300,8 @@ class _StoryPromoBanner extends StatelessWidget {
                   color: AppColors.seafoam,
                 ),
                 child: const Icon(
-                  Icons.play_arrow,
-                  size: 20,
+                  Icons.chevron_right,
+                  size: 22,
                   color: AppColors.onAccent,
                 ),
               ),

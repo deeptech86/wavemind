@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/health_data_service.dart';
 import '../data/wellness_repository.dart';
 import '../data/wellness_stats.dart';
 import '../theme/app_colors.dart';
@@ -17,23 +18,39 @@ import 'anonymous_chat_screen.dart';
 ///   * **Fleet Spirit** — a new voyage-milestone / contribution / leaderboard
 ///     view ranked by "knots". Static data for Stage 1.
 ///
-/// Anchor Pool is the default so the existing wired flow stays front-and-centre.
+/// Anchor Pool is the default so the existing wired flow stays front-and-centre,
+/// but a caller (e.g. Helm's Fleet Standing card) can open straight onto a
+/// chosen tab via [initialTab].
 class CommunityConnectScreen extends StatefulWidget {
-  const CommunityConnectScreen({super.key, WellnessRepository? repository})
-    : _repository = repository;
+  const CommunityConnectScreen({
+    super.key,
+    WellnessRepository? repository,
+    HealthDataService? healthService,
+    this.initialTab = CrewTab.anchorPool,
+  }) : _repository = repository,
+       _healthService = healthService;
 
   final WellnessRepository? _repository;
+
+  /// Optional injection point for tests. In production the health-sync button
+  /// builds its own [HealthDataService]; nothing it reads is ever persisted.
+  final HealthDataService? _healthService;
+
+  /// The tab to show first. Defaults to [CrewTab.anchorPool].
+  final CrewTab initialTab;
 
   @override
   State<CommunityConnectScreen> createState() => _CommunityConnectScreenState();
 }
 
-enum _CrewTab { anchorPool, fleetSpirit }
+/// The two Crew destinations behind the segmented control. Public so callers
+/// can request an initial tab via [CommunityConnectScreen.initialTab].
+enum CrewTab { anchorPool, fleetSpirit }
 
 class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
   late final WellnessRepository _repo =
       widget._repository ?? WellnessRepository();
-  _CrewTab _tab = _CrewTab.anchorPool;
+  late CrewTab _tab = widget.initialTab;
   ContributionSummary _summary = ContributionSummary.empty;
 
   @override
@@ -76,7 +93,7 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
                         onChanged: (t) => setState(() => _tab = t),
                       ),
                       const SizedBox(height: 20),
-                      if (_tab == _CrewTab.anchorPool)
+                      if (_tab == CrewTab.anchorPool)
                         _AnchorPoolView(
                           onCast: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
@@ -85,7 +102,12 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
                           ),
                         )
                       else
-                        _FleetSpiritView(summary: _summary),
+                        _FleetSpiritView(
+                          summary: _summary,
+                          repository: _repo,
+                          healthService: widget._healthService,
+                          onSynced: _loadSummary,
+                        ),
                     ],
                   ),
                 ),
@@ -105,8 +127,8 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
 class _SegmentedControl extends StatelessWidget {
   const _SegmentedControl({required this.active, required this.onChanged});
 
-  final _CrewTab active;
-  final ValueChanged<_CrewTab> onChanged;
+  final CrewTab active;
+  final ValueChanged<CrewTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -123,16 +145,16 @@ class _SegmentedControl extends StatelessWidget {
             child: _SegmentButton(
               icon: Icons.waves,
               label: 'Anchor Pool',
-              selected: active == _CrewTab.anchorPool,
-              onTap: () => onChanged(_CrewTab.anchorPool),
+              selected: active == CrewTab.anchorPool,
+              onTap: () => onChanged(CrewTab.anchorPool),
             ),
           ),
           Expanded(
             child: _SegmentButton(
               icon: Icons.military_tech,
               label: 'Fleet Spirit',
-              selected: active == _CrewTab.fleetSpirit,
-              onTap: () => onChanged(_CrewTab.fleetSpirit),
+              selected: active == CrewTab.fleetSpirit,
+              onTap: () => onChanged(CrewTab.fleetSpirit),
             ),
           ),
         ],
@@ -445,9 +467,19 @@ class _GratitudeNote extends StatelessWidget {
 // ===========================================================================
 
 class _FleetSpiritView extends StatelessWidget {
-  const _FleetSpiritView({required this.summary});
+  const _FleetSpiritView({
+    required this.summary,
+    required this.repository,
+    required this.onSynced,
+    this.healthService,
+  });
 
   final ContributionSummary summary;
+  final WellnessRepository repository;
+  final HealthDataService? healthService;
+
+  /// Called after a successful health sync so the parent reloads the summary.
+  final Future<void> Function() onSynced;
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +494,13 @@ class _FleetSpiritView extends StatelessWidget {
       children: [
         const _VoyageMilestoneCard(),
         const SizedBox(height: 20),
-        _ContributionCard(summary: summary, rank: rank),
+        _ContributionCard(
+          summary: summary,
+          rank: rank,
+          repository: repository,
+          healthService: healthService,
+          onSynced: onSynced,
+        ),
         const SizedBox(height: 24),
         _LeaderboardSection(summary: summary),
         const SizedBox(height: 20),
@@ -616,10 +654,19 @@ class _VoyageMilestoneCard extends StatelessWidget {
 }
 
 class _ContributionCard extends StatelessWidget {
-  const _ContributionCard({required this.summary, required this.rank});
+  const _ContributionCard({
+    required this.summary,
+    required this.rank,
+    required this.repository,
+    required this.onSynced,
+    this.healthService,
+  });
 
   final ContributionSummary summary;
   final int rank;
+  final WellnessRepository repository;
+  final HealthDataService? healthService;
+  final Future<void> Function() onSynced;
 
   @override
   Widget build(BuildContext context) {
@@ -692,7 +739,196 @@ class _ContributionCard extends StatelessWidget {
               ),
             ],
           ),
+          _HealthSyncButton(
+            repository: repository,
+            healthService: healthService,
+            onSynced: onSynced,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Phase of the tap-triggered manual health sync. Mirrors the states
+/// `_WatchHealthCard` in weekly_insights_screen.dart already solves, collapsed
+/// to what a single button needs:
+///   * [unsupported] — no health store on this platform; the button hides.
+///   * [idle] — ready to sync.
+///   * [syncing] — a sync is in flight (availability/permission/read/persist).
+enum _SyncPhase { unsupported, idle, syncing }
+
+/// A compact "Sync Watch Data" pill inside the contribution card. On tap it
+/// live-reads today's steps + sleep from the phone health store, converts them
+/// to Fleet Knots points, and — if the total is positive — persists a single
+/// one-off ledger entry then refreshes the card. Raw health values never leave
+/// ephemeral memory; only the computed points are persisted.
+///
+/// It handles the same availability/permission lifecycle as the Watch Vitals
+/// card (unsupported -> hidden; Health Connect missing -> prompt to install;
+/// not yet authorized -> request; denied -> retry messaging), surfaced as
+/// SnackBars rather than a full card body since this is a single button.
+class _HealthSyncButton extends StatefulWidget {
+  const _HealthSyncButton({
+    required this.repository,
+    required this.onSynced,
+    this.healthService,
+  });
+
+  final WellnessRepository repository;
+  final HealthDataService? healthService;
+  final Future<void> Function() onSynced;
+
+  @override
+  State<_HealthSyncButton> createState() => _HealthSyncButtonState();
+}
+
+class _HealthSyncButtonState extends State<_HealthSyncButton> {
+  late final HealthDataService _service =
+      widget.healthService ?? HealthDataService();
+
+  _SyncPhase _phase = _SyncPhase.idle;
+
+  @override
+  void initState() {
+    super.initState();
+    _probeAvailability();
+  }
+
+  /// Decide up-front whether this platform has a health store at all; if not,
+  /// the button hides itself (matching the Watch Vitals card's unsupported
+  /// behavior) rather than offering a sync that can never work.
+  Future<void> _probeAvailability() async {
+    try {
+      final availability = await _service.availability();
+      if (!mounted) return;
+      if (availability == HealthAvailability.unsupported) {
+        setState(() => _phase = _SyncPhase.unsupported);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _phase = _SyncPhase.unsupported);
+    }
+  }
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _sync() async {
+    if (_phase == _SyncPhase.syncing) return;
+    setState(() => _phase = _SyncPhase.syncing);
+    try {
+      // 1. Re-check the store is reachable (and installed on Android).
+      final availability = await _service.availability();
+      if (!mounted) return;
+      switch (availability) {
+        case HealthAvailability.unsupported:
+          setState(() => _phase = _SyncPhase.unsupported);
+          return;
+        case HealthAvailability.needsInstall:
+          _notify(
+            'Health Connect is required to sync on Android. Opening the '
+            'Play Store…',
+          );
+          await _service.installHealthStore();
+          if (mounted) setState(() => _phase = _SyncPhase.idle);
+          return;
+        case HealthAvailability.available:
+          break;
+      }
+
+      // 2. Ensure read permission, requesting it if we don't already have it.
+      final granted = await _service.hasPermissions();
+      if (!mounted) return;
+      if (granted != true) {
+        final ok = await _service.requestPermissions();
+        if (!mounted) return;
+        if (!ok) {
+          _notify(
+            'Health access was declined. Grant read access to steps and '
+            'sleep, then tap Sync again.',
+          );
+          setState(() => _phase = _SyncPhase.idle);
+          return;
+        }
+      }
+
+      // 3. Live-read + convert to points (null metrics count as 0).
+      final snapshot = await _service.readToday();
+      if (!mounted) return;
+      final points = HealthDataService.pointsForSync(snapshot);
+
+      // 4. Persist only a positive, meaningful amount; refresh + confirm.
+      if (points > 0) {
+        await widget.repository.recordHealthSync(knots: points);
+        await widget.onSynced();
+        _notify("Synced — +$points Fleet Knots from today's activity.");
+      } else {
+        _notify('No health data to sync yet today.');
+      }
+    } catch (_) {
+      // Degrade gracefully: a denied permission or unreachable store must
+      // never throw into the UI.
+      _notify('Could not sync health data right now. Please try again.');
+    } finally {
+      if (mounted && _phase == _SyncPhase.syncing) {
+        setState(() => _phase = _SyncPhase.idle);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // No health store on this platform: offer nothing.
+    if (_phase == _SyncPhase.unsupported) return const SizedBox.shrink();
+
+    final syncing = _phase == _SyncPhase.syncing;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Material(
+          color: AppColors.seafoamFaint,
+          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            onTap: syncing ? null : _sync,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (syncing)
+                    const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.seafoam,
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.sync,
+                      size: 16,
+                      color: AppColors.seafoam,
+                    ),
+                  const SizedBox(width: 8),
+                  Text(
+                    syncing ? 'Syncing…' : 'Sync Watch Data',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.seafoam,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

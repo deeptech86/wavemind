@@ -140,6 +140,24 @@ class WellnessRepository {
     }, fallback: null);
   }
 
+  // --- Health sync ----------------------------------------------------------
+
+  /// Persists a single one-off Fleet Knots ledger entry for a manual health
+  /// sync. The point [knots] amount is computed live from today's steps/sleep
+  /// by the caller and passed in explicitly — only this computed value ever
+  /// crosses the persistence boundary; raw health metrics never do.
+  ///
+  /// Follows the same graceful-degradation posture as the other writers: a
+  /// no-op (not a throw) when the native DB is unavailable (e.g. widget tests).
+  Future<void> recordHealthSync({required int knots}) {
+    return _guard<void>(() async {
+      final db = await _appDb.database;
+      await db.transaction((txn) async {
+        await _insertKnot(txn, KnotEventType.healthSync, knots: knots);
+      });
+    }, fallback: null);
+  }
+
   Future<List<BreathingSession>> breathingSessions() {
     return _guard<List<BreathingSession>>(() async {
       final db = await _appDb.database;
@@ -192,10 +210,17 @@ class WellnessRepository {
 
   // --- Internals ------------------------------------------------------------
 
-  Future<void> _insertKnot(Transaction txn, KnotEventType type) {
+  /// Inserts a ledger row for [type]. The three fixed-value call sites
+  /// (mood/journal/breathing) omit [knots] and fall back to the type's own
+  /// fixed value; the health-sync path passes an explicit variable amount.
+  Future<void> _insertKnot(
+    Transaction txn,
+    KnotEventType type, {
+    int? knots,
+  }) {
     final event = KnotEvent(
       type: type,
-      knots: type.knots,
+      knots: knots ?? type.knots,
       createdAt: DateTime.now(),
     );
     return txn.insert('knot_events', event.toMap()).then((_) {});
