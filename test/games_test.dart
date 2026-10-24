@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tidewell_app/data/games/dominoes_game.dart';
+import 'package:tidewell_app/data/games/fog_signal_echo.dart';
 import 'package:tidewell_app/data/games/knot_puzzle.dart';
 import 'package:tidewell_app/data/games/sextant_balance.dart';
 
@@ -532,6 +533,94 @@ void main() {
         layout: const [PlacedDomino(5, 6, Domino(5, 6))],
       );
       expect(() => game.pass(), throwsStateError);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fog Signal Echo — call-and-repeat foghorn-bearing pattern memory.
+  // ---------------------------------------------------------------------------
+
+  group('FogSignalEcho', () {
+    test('a fresh game has no rounds yet', () {
+      final game = FogSignalEcho();
+      expect(game.round, 0);
+      expect(game.sequence, isEmpty);
+      expect(game.isComplete, isFalse);
+    });
+
+    test('nextRound appends exactly one signal and resets echo position', () {
+      final game = FogSignalEcho(random: Random(1));
+      final first = game.nextRound();
+      expect(game.round, 1);
+      expect(game.sequence, [first]);
+      expect(game.roundComplete, isFalse);
+    });
+
+    test('echoing the sequence correctly completes the round', () {
+      final game = FogSignalEcho(random: Random(1));
+      final signal = game.nextRound();
+      expect(game.echo(signal), isTrue);
+      expect(game.roundComplete, isTrue);
+    });
+
+    test('echoing the wrong signal does not advance and reports false', () {
+      final game = FogSignalEcho(random: Random(1));
+      final signal = game.nextRound();
+      final wrong = FogSignal.values.firstWhere((s) => s != signal);
+      expect(game.echo(wrong), isFalse);
+      expect(game.roundComplete, isFalse);
+    });
+
+    test('a round must be echoed in order, not just as a set', () {
+      final game = FogSignalEcho(random: Random(7));
+      game.nextRound();
+      game.nextRound(); // sequence now has 2 signals
+      final seq = game.sequence;
+      // Echoing the second signal first is wrong even though it's somewhere
+      // in the sequence.
+      expect(game.echo(seq[1]), isFalse);
+    });
+
+    test('retryRound replays the same sequence without growing it', () {
+      final game = FogSignalEcho(random: Random(1));
+      game.nextRound();
+      game.nextRound();
+      final seq = List.of(game.sequence);
+      game.echo(seq[0]); // partial progress into the round
+      game.retryRound();
+      expect(game.sequence, seq); // unchanged
+      expect(game.roundComplete, isFalse);
+      // Echoing from the start again now works.
+      for (final signal in seq) {
+        expect(game.echo(signal), isTrue);
+      }
+      expect(game.roundComplete, isTrue);
+    });
+
+    test('isComplete once the sequence reaches targetRounds', () {
+      final game = FogSignalEcho(targetRounds: 3, random: Random(1));
+      game.nextRound();
+      expect(game.isComplete, isFalse);
+      game.nextRound();
+      expect(game.isComplete, isFalse);
+      game.nextRound();
+      expect(game.isComplete, isTrue);
+      expect(game.round, 3);
+    });
+
+    test('reset clears the sequence and echo position', () {
+      final game = FogSignalEcho(random: Random(1));
+      game.nextRound();
+      game.nextRound();
+      game.reset();
+      expect(game.round, 0);
+      expect(game.sequence, isEmpty);
+    });
+
+    test('sequence is unmodifiable', () {
+      final game = FogSignalEcho(random: Random(1));
+      game.nextRound();
+      expect(() => game.sequence.add(FogSignal.bow), throwsUnsupportedError);
     });
   });
 }

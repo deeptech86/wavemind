@@ -6,8 +6,7 @@ real audio files out of the app's ``assets/audio/`` bundle into
 ``backend/media/`` so the seeded catalog serves genuinely playable media from
 the first request.
 
-The five built-in games are registered in ``featured_game``. Four of them
-(everything except the still-unplayable ``fog_signal_echo``) are marked
+The five built-in games are registered in ``featured_game``, all five marked
 eligible for the weekly rotation pool — see ``app.rotation`` for how 2 of the
 eligible games get spotlighted as "Featured this week" automatically, on a
 rolling 7-day cadence, with no manual toggling required.
@@ -51,14 +50,14 @@ GAME_KEYS = [
     "cabin_dominoes",
 ]
 
-# Games eligible for the weekly rotation pool (see `app.rotation`). Only games
-# that are actually playable belong here — `fog_signal_echo` is still a
-# "coming soon" placeholder client-side (see off_watch_games_screen.dart's
-# `ready: false`), so it's excluded until it ships. Which 2 of these are
+# Games eligible for the weekly rotation pool (see `app.rotation`). Only
+# games that are actually playable belong here — all five now ship (see
+# off_watch_games_screen.dart's `ready` flags). Which 2 of these are
 # featured *this week* is computed automatically, not chosen here.
 ELIGIBLE_FOR_ROTATION = {
     "calm_your_waves",
     "knot_master",
+    "fog_signal_echo",
     "sextant_horizon",
     "cabin_dominoes",
 }

@@ -66,9 +66,9 @@ class FeaturedWindowTests(unittest.TestCase):
         self.assertEqual(featured_window([], date(2026, 1, 1)), [])
 
     def test_excluded_game_never_appears(self) -> None:
-        # fog_signal_echo is deliberately absent from the eligible pool callers
-        # pass in (see app.seed.ELIGIBLE_FOR_ROTATION) — the function can only
-        # ever return keys it was given, so it never sneaks back in.
+        # fog_signal_echo is just never in this test's GAMES pool — the
+        # function can only ever return keys it was given, so a key missing
+        # from the input never sneaks back into the picks.
         for week in range(10):
             picks = featured_window(
                 GAMES, date(2026, 1, 1) + timedelta(weeks=week), count=2

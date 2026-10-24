@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/back_header.dart';
 import 'cabin_dominoes_screen.dart';
+import 'fog_signal_echo_screen.dart';
 import 'knot_master_screen.dart';
 import 'mindful_game_screen.dart';
 import 'sextant_horizon_screen.dart';
@@ -41,8 +42,8 @@ class _GameEntry {
 /// "Off-Watch Mind Games" hub (Stitch "offwatch_mind_games" redesign).
 ///
 /// A featured focus ritual plus the catalog of five tactile decompression
-/// games. Four are wired through and playable; "Fog Signal Echo" and the
-/// featured ritual remain presentational and surface a "coming soon" cue.
+/// games. All five are wired through and playable; only the featured
+/// ritual itself remains presentational and surfaces a "coming soon" cue.
 ///
 /// Which games carry a "Featured this week" spotlight (and sort first) is
 /// driven by the content catalog's `featured_game` flags, synced on open.
@@ -92,12 +93,12 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
       icon: AppAssets.cloudFog,
       accent: AppColors.sand,
       title: 'Fog Signal Echo',
-      badge: 'Auditory Calm',
+      badge: 'Ready',
       description:
-          'Sound & pitch pattern recognition imitating foghorns echoing '
-          'through dense squalls.',
-      meta: 'Binaural Low-Hz • 6m',
-      ready: false,
+          'Call-and-repeat foghorn bearings — Bow, Starboard, Stern, Port — '
+          'echoed back in a growing pattern.',
+      meta: 'Pitch signals • 5-7m',
+      ready: true,
     ),
     _GameEntry(
       key: GameKeys.sextantHorizon,
@@ -194,6 +195,10 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
       case GameKeys.cabinDominoes:
         Navigator.of(context).push(
           MaterialPageRoute<void>(builder: (_) => const CabinDominoesScreen()),
+        );
+      case GameKeys.fogSignalEcho:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const FogSignalEchoScreen()),
         );
       default:
         _comingSoon(context, game.title);

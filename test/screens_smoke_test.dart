@@ -18,6 +18,7 @@ import 'package:tidewell_app/screens/signup_screen.dart';
 import 'package:tidewell_app/screens/welcome_screen.dart';
 import 'package:tidewell_app/screens/cabin_dominoes_screen.dart';
 import 'package:tidewell_app/screens/community_connect_screen.dart';
+import 'package:tidewell_app/screens/fog_signal_echo_screen.dart';
 import 'package:tidewell_app/screens/guided_breathing_screen.dart';
 import 'package:tidewell_app/screens/haven_screen.dart';
 import 'package:tidewell_app/screens/journal_entry_screen.dart';
@@ -312,6 +313,30 @@ void main() {
     expect(find.text('Hold the Horizon'), findsOneWidget);
     // Dispose the periodic calm-meter ticker + sensor subscription.
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('fog signal echo renders its signal pads', (tester) async {
+    await pumpScreen(tester, const FogSignalEchoScreen());
+    expect(find.text('Fog Signal Echo'), findsOneWidget);
+    expect(find.text('Echo the Signal'), findsOneWidget);
+    expect(find.text('Bow'), findsOneWidget);
+    expect(find.text('Starboard'), findsOneWidget);
+    expect(find.text('Stern'), findsOneWidget);
+    expect(find.text('Port'), findsOneWidget);
+    expect(find.text('Start Listening'), findsOneWidget);
+  });
+
+  testWidgets('fog signal echo starting a round shows the round counter', (
+    tester,
+  ) async {
+    await pumpScreen(tester, const FogSignalEchoScreen());
+    await tester.tap(find.text('Start Listening'));
+    await tester.pump();
+    expect(find.text('1 / 8'), findsOneWidget);
+    expect(find.text('Listen…'), findsOneWidget);
+    // Drain the tone-playback + inter-note delay timers (fake-clock time,
+    // not real I/O) so none are still pending when the test ends.
+    await tester.pump(const Duration(milliseconds: 700));
   });
 
   testWidgets('cabin dominoes renders its board', (tester) async {
