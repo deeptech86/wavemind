@@ -58,4 +58,30 @@ void main() {
     expect(find.text('10 Days Remaining'), findsOneWidget);
     expect(find.text('Docked'), findsNothing);
   });
+
+  testWidgets(
+      'shows percent completed as elapsed-of-total since the voyage was saved',
+      (tester) async {
+    // 20 days saved 10 days ago -> 10 days left, 50% of the voyage elapsed.
+    await repo.saveVoyageStatus(
+      VoyageStatus(
+        state: VoyageState.voyage,
+        origin: 'Yokohama',
+        destination: 'Valparaiso',
+        totalDays: 20,
+        anchoredAt: DateTime.now().subtract(const Duration(days: 10)),
+      ),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(402, 874));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(home: CommunityConnectScreen(repository: repo)),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('10 Days Remaining'), findsOneWidget);
+    expect(find.text('50% Completed'), findsOneWidget);
+  });
 }

@@ -589,6 +589,12 @@ class _VoyageMilestoneCardState extends State<_VoyageMilestoneCard> {
     }
 
     final remaining = status.daysRemaining() ?? 0;
+    final totalDays = status.totalDays ?? 0;
+    // Elapsed days since the countdown was saved, as a fraction of the
+    // total days entered then — e.g. 20 days saved, 10 left today = 50%.
+    final percentComplete = totalDays > 0
+        ? ((totalDays - remaining) / totalDays).clamp(0.0, 1.0)
+        : 0.0;
 
     return Container(
       width: double.infinity,
@@ -664,7 +670,7 @@ class _VoyageMilestoneCardState extends State<_VoyageMilestoneCard> {
               ),
               Flexible(
                 child: Text(
-                  '84% Swell Harmony',
+                  '${(percentComplete * 100).round()}% Completed',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.caption.copyWith(
                     color: AppColors.seafoam,
@@ -687,7 +693,7 @@ class _VoyageMilestoneCardState extends State<_VoyageMilestoneCard> {
           ClipRRect(
             borderRadius: BorderRadius.circular(AppTheme.radiusPill),
             child: LinearProgressIndicator(
-              value: 0.84,
+              value: percentComplete,
               minHeight: 8,
               backgroundColor: AppColors.deepNavy,
               valueColor: const AlwaysStoppedAnimation<Color>(AppColors.seafoam),
