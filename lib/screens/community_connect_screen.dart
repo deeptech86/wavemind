@@ -25,15 +25,15 @@ int currentFleetRank(int totalKnots) =>
 ///   * **Fleet Spirit** — a new voyage-milestone / contribution / leaderboard
 ///     view ranked by "knots". Static data for Stage 1.
 ///
-/// Anchor Pool is the default so the existing wired flow stays front-and-centre,
-/// but a caller (e.g. Helm's Fleet Standing card) can open straight onto a
-/// chosen tab via [initialTab].
+/// Fleet Spirit is the default — the individual weekly-challenge competition
+/// is the primary reason to open Crew now — but a caller can still request
+/// Anchor Pool explicitly via [initialTab].
 class CommunityConnectScreen extends StatefulWidget {
   const CommunityConnectScreen({
     super.key,
     WellnessRepository? repository,
     HealthDataService? healthService,
-    this.initialTab = CrewTab.anchorPool,
+    this.initialTab = CrewTab.fleetSpirit,
   }) : _repository = repository,
        _healthService = healthService;
 
@@ -43,7 +43,7 @@ class CommunityConnectScreen extends StatefulWidget {
   /// builds its own [HealthDataService]; nothing it reads is ever persisted.
   final HealthDataService? _healthService;
 
-  /// The tab to show first. Defaults to [CrewTab.anchorPool].
+  /// The tab to show first. Defaults to [CrewTab.fleetSpirit].
   final CrewTab initialTab;
 
   @override
@@ -150,18 +150,18 @@ class _SegmentedControl extends StatelessWidget {
         children: [
           Expanded(
             child: _SegmentButton(
-              icon: Icons.waves,
-              label: 'Anchor Pool',
-              selected: active == CrewTab.anchorPool,
-              onTap: () => onChanged(CrewTab.anchorPool),
-            ),
-          ),
-          Expanded(
-            child: _SegmentButton(
               icon: Icons.military_tech,
               label: 'Fleet Spirit',
               selected: active == CrewTab.fleetSpirit,
               onTap: () => onChanged(CrewTab.fleetSpirit),
+            ),
+          ),
+          Expanded(
+            child: _SegmentButton(
+              icon: Icons.waves,
+              label: 'Anchor Pool',
+              selected: active == CrewTab.anchorPool,
+              onTap: () => onChanged(CrewTab.anchorPool),
             ),
           ),
         ],
@@ -741,7 +741,7 @@ class _ContributionCard extends StatelessWidget {
               ),
               _KnotBadge(
                 icon: Icons.military_tech,
-                label: 'Fleet Rank #$rank',
+                label: 'Rank #$rank',
                 color: AppColors.cream,
               ),
               _HealthSyncButton(
@@ -1037,8 +1037,9 @@ class _LeaderboardSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Merge the real "You" row into the static roster and sort by knots so the
-    // user always sits in a position consistent with their real total.
+    // The top 4 competitors always hold rows 1-4 in fixed order; the real
+    // user is always appended as the 5th row, labeled with their true
+    // individual rank rather than their position in this list.
     final you = _LeaderEntry(
       initials: 'MT',
       color: AppColors.teal,
@@ -1047,8 +1048,11 @@ class _LeaderboardSection extends StatelessWidget {
       knots: summary.totalKnots,
       isUser: true,
     );
-    final entries = [..._Leaderboard.competitors, you]
-      ..sort((a, b) => b.knots.compareTo(a.knots));
+    final entries = [..._Leaderboard.competitors, you];
+    final ranks = [
+      for (var i = 0; i < _Leaderboard.competitors.length; i++) i + 1,
+      currentFleetRank(summary.totalKnots),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1110,7 +1114,7 @@ class _LeaderboardSection extends StatelessWidget {
         for (var i = 0; i < entries.length; i++) ...[
           if (i > 0) const SizedBox(height: 10),
           _LeaderRow(
-            rank: i + 1,
+            rank: ranks[i],
             initials: entries[i].initials,
             color: entries[i].color,
             name: entries[i].name,

@@ -13,6 +13,13 @@ import 'journal_entry_screen.dart';
 import 'profile_screen.dart';
 import 'weekly_insights_screen.dart';
 
+/// Days left in the current weekly challenge window. Challenges run
+/// Monday–Sunday, so this counts down to the following Monday.
+int daysRemainingInChallengeWeek([DateTime? now]) {
+  final today = now ?? DateTime.now();
+  return DateTime.sunday - today.weekday;
+}
+
 /// Main app dashboard shown after onboarding — the "Helm" (Stitch
 /// "helm_dashboard" redesign).
 class HomeDashboardScreen extends StatefulWidget {
@@ -73,6 +80,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       _LeaderboardScoreBanner(
                         totalKnots: _summary.totalKnots,
                         rank: currentFleetRank(_summary.totalKnots),
+                        daysToGo: daysRemainingInChallengeWeek(),
                         onTap: () => _open(
                           context,
                           const CommunityConnectScreen(
@@ -240,11 +248,15 @@ class _LeaderboardScoreBanner extends StatelessWidget {
   const _LeaderboardScoreBanner({
     required this.totalKnots,
     required this.rank,
+    required this.daysToGo,
     required this.onTap,
   });
 
   final int totalKnots;
   final int rank;
+
+  /// Days left in the current weekly challenge window (Monday–Sunday).
+  final int daysToGo;
   final VoidCallback onTap;
 
   @override
@@ -281,7 +293,7 @@ class _LeaderboardScoreBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'FLEET STANDING',
+                      'VOYAGE TO VICTORY',
                       style: AppTextStyles.badge.copyWith(
                         color: AppColors.sand,
                       ),
@@ -295,7 +307,7 @@ class _LeaderboardScoreBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Fleet Rank #$rank',
+                      'Rank #$rank • $daysToGo ${daysToGo == 1 ? 'day' : 'days'} to go',
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.seafoam,
                       ),

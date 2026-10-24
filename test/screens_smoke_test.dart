@@ -52,35 +52,39 @@ void main() {
     expect(find.text('DAILY SEAPROMPT'), findsOneWidget);
   });
 
-  testWidgets('helm shows the fleet standing banner (not the old story promo)',
+  testWidgets('helm shows the voyage to victory banner (not the old story promo)',
       (tester) async {
     await pumpScreen(tester, const HomeDashboardScreen());
     await tester.pump(); // let the (gracefully-degrading) summary load settle
-    expect(find.text('FLEET STANDING'), findsOneWidget);
+    expect(find.text('VOYAGE TO VICTORY'), findsOneWidget);
     expect(find.text('0 Fleet Knots'), findsOneWidget); // empty ledger default
-    // Last among the 4 fixed mock competitors with 0 knots.
-    expect(find.text('Fleet Rank #5'), findsOneWidget);
+    // Last among the 4 fixed mock competitors with 0 knots. The days-to-go
+    // suffix is date-dependent, so match on the stable rank prefix only.
+    expect(find.textContaining('Rank #5'), findsOneWidget);
     // The removed Off-Watch Story banner must be gone from Helm.
     expect(find.text('OFF-WATCH STORY'), findsNothing);
     expect(find.text('The Lighthouse at Cape Horn'), findsNothing);
   });
 
-  testWidgets('crew renders the anchor pool tab by default', (tester) async {
+  testWidgets('crew renders the fleet spirit tab by default', (tester) async {
     await pumpScreen(tester, const CommunityConnectScreen());
     // "Crew" appears twice: the screen header and the bottom-nav tab label.
     expect(find.text('Crew'), findsWidgets);
-    expect(find.text('Anchor Pool'), findsOneWidget);
-    expect(find.text('Cast to Fleet'), findsOneWidget);
-    // Fleet Spirit content is not shown until that tab is selected.
-    expect(find.text('Fleet Solidarity Log'), findsNothing);
+    expect(find.text('Fleet Spirit'), findsOneWidget);
+    expect(find.text('Fleet Solidarity Log'), findsOneWidget);
+    // Anchor Pool content is not shown until that tab is selected.
+    expect(find.text('Cast to Fleet'), findsNothing);
   });
 
-  testWidgets('crew fleet spirit tab reveals the leaderboard', (tester) async {
+  testWidgets('crew tabs switch between fleet spirit and anchor pool', (
+    tester,
+  ) async {
     await pumpScreen(tester, const CommunityConnectScreen());
-    await tester.tap(find.text('Fleet Spirit'));
-    await tester.pump();
     expect(find.text('Fleet Solidarity Log'), findsOneWidget);
-    expect(find.text('Bosun Liam S.'), findsOneWidget);
+    await tester.tap(find.text('Anchor Pool'));
+    await tester.pump();
+    expect(find.text('Cast to Fleet'), findsOneWidget);
+    expect(find.text('Fleet Solidarity Log'), findsNothing);
   });
 
   testWidgets('crew opens directly on Fleet Spirit via initialTab', (
@@ -97,7 +101,7 @@ void main() {
     expect(find.text('YOUR CONTRIBUTION'), findsOneWidget);
     // Rank badge sits alongside the streak/sea-logs badges and the sync
     // button in a single horizontal Wrap, not stacked below them.
-    expect(find.text('Fleet Rank #5'), findsOneWidget);
+    expect(find.text('Rank #5'), findsOneWidget);
   });
 
   testWidgets('haven hub renders its sections', (tester) async {
