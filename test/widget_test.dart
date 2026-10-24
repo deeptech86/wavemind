@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tidewell_app/screens/signup_screen.dart';
+import 'package:tidewell_app/screens/login_screen.dart';
 import 'package:tidewell_app/screens/welcome_screen.dart';
 
 void main() {
-  testWidgets('Welcome screen renders and Embark opens Signup', (
+  testWidgets('Welcome screen renders and Embark opens Login', (
     WidgetTester tester,
   ) async {
     // Emulate a portrait phone (~402x874 logical, as in the Figma frames).
@@ -21,13 +21,13 @@ void main() {
     expect(find.text('Your anchor in open waters'), findsOneWidget);
     expect(find.text('Embark'), findsOneWidget);
 
-    // Tapping Embark now opens the Signup screen (first-time framing), not the
-    // dashboard — the app is gated behind auth.
+    // Tapping Embark opens Login first (returning-sailor framing); new
+    // sailors reach Signup from the "New here? Sign up" link there.
     await tester.tap(find.text('Embark'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(SignupScreen), findsOneWidget);
-    expect(find.text('Chart your course'), findsOneWidget);
-    expect(find.text('Create Account'), findsOneWidget);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.text('Welcome back aboard'), findsOneWidget);
+    expect(find.text('Log In'), findsOneWidget);
   });
 }
