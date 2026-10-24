@@ -694,33 +694,13 @@ class _VoyageMilestoneCardState extends State<_VoyageMilestoneCard> {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  '$remaining ${remaining == 1 ? 'Day' : 'Days'} Remaining',
-                  style: AppTextStyles.caption,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Flexible(
-                child: Text(
-                  '6,420 NM Traveled',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.caption.copyWith(color: AppColors.cream),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Flexible(
-                child: Text(
-                  '1,280 NM to go',
-                  textAlign: TextAlign.end,
-                  style: AppTextStyles.caption,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          // NM traveled/to go were static placeholder distances with no real
+          // data source (no route-progress model exists), so they're gone —
+          // only the real, saved days-remaining count is shown.
+          Text(
+            '$remaining ${remaining == 1 ? 'Day' : 'Days'} Remaining',
+            style: AppTextStyles.caption,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

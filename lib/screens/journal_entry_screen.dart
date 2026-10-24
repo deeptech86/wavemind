@@ -118,10 +118,6 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                         ),
                       ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24),
-                child: _CoordinatesStamp(),
-              ),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
@@ -151,27 +147,6 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _CoordinatesStamp extends StatelessWidget {
-  const _CoordinatesStamp();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SvgPicture.asset(AppAssets.mapPin, width: 16, height: 16),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            "Coord: 32°14'N, 64°49'W · Wind Force 4",
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.cream),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
     );
   }
 }
