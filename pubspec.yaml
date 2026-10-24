@@ -70,6 +70,7 @@ dependencies:
   # behind one API. Data is fetched live and never persisted — see
   # lib/data/health_data_service.dart.
   health: ^13.3.2
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:

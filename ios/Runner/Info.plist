@@ -8,6 +8,8 @@
 	<string>TideWell reads your step count and sleep from Apple Health to show your activity and rest alongside your wellness log. This data is shown live and is never stored or uploaded.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>TideWell does not write any data to Apple Health; it only reads your steps and sleep to display them.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TideWell lets you pick a photo from your library to use as your crew profile picture. It stays on this device and is never uploaded.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

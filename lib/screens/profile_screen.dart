@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../core/app_assets.dart';
 import '../data/auth_api.dart';
 import '../data/auth_token_storage.dart';
+import '../data/profile_photo_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -21,12 +25,20 @@ import 'welcome_screen.dart';
 /// crashing or hanging. A Logout action clears the stored session token and
 /// returns to the Welcome screen.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, AuthApi? api, AuthTokenStorage? tokenStorage})
-    : _api = api,
-      _tokenStorage = tokenStorage;
+  const ProfileScreen({
+    super.key,
+    AuthApi? api,
+    AuthTokenStorage? tokenStorage,
+    ProfilePhotoService? photoService,
+  }) : _api = api,
+       _tokenStorage = tokenStorage,
+       _photoService = photoService;
 
   final AuthApi? _api;
   final AuthTokenStorage? _tokenStorage;
+
+  /// Optional injection point for tests.
+  final ProfilePhotoService? _photoService;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -37,6 +49,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final bool _ownsApi = widget._api == null;
   late final AuthTokenStorage _tokenStorage =
       widget._tokenStorage ?? AuthTokenStorage();
+  late final ProfilePhotoService _photoService =
+      widget._photoService ?? ProfilePhotoService();
 
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
@@ -50,10 +64,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loggingOut = false;
   String? _loadError;
 
+  File? _photo;
+  bool _pickingPhoto = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadPhoto();
+  }
+
+  Future<void> _loadPhoto() async {
+    final photo = await _photoService.currentPhoto();
+    if (!mounted) return;
+    setState(() => _photo = photo);
+  }
+
+  Future<void> _pickPhoto() async {
+    if (_pickingPhoto) return;
+    setState(() => _pickingPhoto = true);
+    try {
+      final photo = await _photoService.pickFromGallery();
+      if (!mounted) return;
+      if (photo != null) setState(() => _photo = photo);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open your photo library. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
   }
 
   Future<void> _load() async {
@@ -196,6 +239,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              Center(
+                                child: _ProfilePhotoPicker(
+                                  photo: _photo,
+                                  busy: _pickingPhoto,
+                                  onTap: _pickPhoto,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
                               Text(
                                 'Your crew account. Everything else in TideWell '
                                 'stays private on this device.',
@@ -365,6 +416,98 @@ class _LogoutButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The circular avatar at the top of the profile form. Tapping it (or the
+/// "Change Photo" / "Add Photo" link beneath it) opens the gallery picker
+/// via [ProfilePhotoService] — the photo is copied into local app storage
+/// and never leaves the device.
+class _ProfilePhotoPicker extends StatelessWidget {
+  const _ProfilePhotoPicker({
+    required this.photo,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final File? photo;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: busy ? null : onTap,
+          child: Semantics(
+            button: true,
+            label: photo == null ? 'Add a profile photo' : 'Change profile photo',
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: const BoxDecoration(
+                    color: AppColors.cream,
+                    shape: BoxShape.circle,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: photo != null
+                      ? Image.file(photo!, fit: BoxFit.cover)
+                      : Image.asset(AppAssets.avatar, fit: BoxFit.cover),
+                ),
+                if (busy)
+                  Container(
+                    width: 96,
+                    height: 96,
+                    decoration: const BoxDecoration(
+                      color: AppColors.overlayDark,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.seafoam,
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: const BoxDecoration(
+                      color: AppColors.seafoam,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.photo_camera,
+                      size: 15,
+                      color: AppColors.onAccent,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: busy ? null : onTap,
+          child: Text(
+            photo == null ? 'Add Photo' : 'Change Photo',
+            style: AppTextStyles.bodyStrong.copyWith(color: AppColors.seafoam),
+          ),
+        ),
+      ],
     );
   }
 }

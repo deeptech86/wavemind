@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -5,6 +7,7 @@ import '../core/app_assets.dart';
 import '../data/leaderboard_service.dart';
 import '../data/models/leaderboard_entry.dart';
 import '../data/models/voyage_status.dart';
+import '../data/profile_photo_service.dart';
 import '../data/wellness_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
@@ -31,14 +34,19 @@ class HomeDashboardScreen extends StatefulWidget {
     super.key,
     WellnessRepository? repository,
     LeaderboardService? leaderboardService,
+    ProfilePhotoService? photoService,
   }) : _repository = repository,
-       _leaderboardService = leaderboardService;
+       _leaderboardService = leaderboardService,
+       _photoService = photoService;
 
   /// Optional injection point for tests; defaults to the shared on-device repo.
   final WellnessRepository? _repository;
 
   /// Optional injection point for tests.
   final LeaderboardService? _leaderboardService;
+
+  /// Optional injection point for tests.
+  final ProfilePhotoService? _photoService;
 
   @override
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
@@ -118,7 +126,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _DashboardHeader(repository: _repo),
+                  _DashboardHeader(
+                    repository: _repo,
+                    photoService: widget._photoService,
+                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
                     child: Column(
@@ -168,9 +179,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 // ---------------------------------------------------------------------------
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.repository});
+  const _DashboardHeader({required this.repository, this.photoService});
 
   final WellnessRepository repository;
+  final ProfilePhotoService? photoService;
 
   @override
   Widget build(BuildContext context) {
@@ -192,7 +204,7 @@ class _DashboardHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _UserProfileBar(),
+              _UserProfileBar(photoService: photoService),
               const SizedBox(height: 16),
               _VoyageBanner(repository: repository),
             ],
@@ -203,8 +215,42 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
-class _UserProfileBar extends StatelessWidget {
-  const _UserProfileBar();
+class _UserProfileBar extends StatefulWidget {
+  const _UserProfileBar({this.photoService});
+
+  /// Optional injection point for tests.
+  final ProfilePhotoService? photoService;
+
+  @override
+  State<_UserProfileBar> createState() => _UserProfileBarState();
+}
+
+class _UserProfileBarState extends State<_UserProfileBar> {
+  late final ProfilePhotoService _photoService =
+      widget.photoService ?? ProfilePhotoService();
+
+  File? _photo;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhoto();
+  }
+
+  Future<void> _loadPhoto() async {
+    final photo = await _photoService.currentPhoto();
+    if (!mounted) return;
+    setState(() => _photo = photo);
+  }
+
+  Future<void> _openProfile(BuildContext context) async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
+    // The photo may have changed while on the Profile screen — pick up the
+    // new one (or its removal) now that we're back.
+    _loadPhoto();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -228,9 +274,7 @@ class _UserProfileBar extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         GestureDetector(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
-          ),
+          onTap: () => _openProfile(context),
           child: Semantics(
             button: true,
             label: 'Open crew profile',
@@ -242,7 +286,9 @@ class _UserProfileBar extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               clipBehavior: Clip.antiAlias,
-              child: Image.asset(AppAssets.avatar, fit: BoxFit.cover),
+              child: _photo != null
+                  ? Image.file(_photo!, fit: BoxFit.cover)
+                  : Image.asset(AppAssets.avatar, fit: BoxFit.cover),
             ),
           ),
         ),

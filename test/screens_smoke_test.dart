@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -7,6 +9,7 @@ import 'package:tidewell_app/data/crew_message_service.dart';
 import 'package:tidewell_app/data/crew_mood_service.dart';
 import 'package:tidewell_app/data/leaderboard_service.dart';
 import 'package:tidewell_app/data/models/account.dart';
+import 'package:tidewell_app/data/profile_photo_service.dart';
 import 'package:tidewell_app/screens/auth_gate.dart';
 import 'package:tidewell_app/screens/home_dashboard_screen.dart';
 import 'package:tidewell_app/screens/login_screen.dart';
@@ -46,6 +49,8 @@ void main() {
       CrewMoodService(tokenStorage: _FakeTokenStorage(null));
   CrewMessageService noCrewMessageSync() =>
       CrewMessageService(tokenStorage: _FakeTokenStorage(null));
+  // Same reasoning: path_provider has no mock registered either.
+  ProfilePhotoService noPhoto() => _FakePhotoService();
 
   testWidgets('mood check-in renders its sections', (tester) async {
     await pumpScreen(tester, const MoodCheckInScreen());
@@ -71,7 +76,10 @@ void main() {
     (tester) async {
       await pumpScreen(
         tester,
-        HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+        HomeDashboardScreen(
+          leaderboardService: noLeaderboardSync(),
+          photoService: noPhoto(),
+        ),
       );
       await tester
           .pumpAndSettle(); // let the backend rank sync settle (fails gracefully)
@@ -94,7 +102,10 @@ void main() {
     (tester) async {
       await pumpScreen(
         tester,
-        HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+        HomeDashboardScreen(
+          leaderboardService: noLeaderboardSync(),
+          photoService: noPhoto(),
+        ),
       );
       await tester.pump();
       expect(find.text('Voyage Details'), findsOneWidget);
@@ -110,7 +121,10 @@ void main() {
   ) async {
     await pumpScreen(
       tester,
-      HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+      HomeDashboardScreen(
+        leaderboardService: noLeaderboardSync(),
+        photoService: noPhoto(),
+      ),
     );
     await tester.pump();
     await tester.tap(find.text('Voyage'));
@@ -125,7 +139,10 @@ void main() {
     (tester) async {
       await pumpScreen(
         tester,
-        HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+        HomeDashboardScreen(
+          leaderboardService: noLeaderboardSync(),
+          photoService: noPhoto(),
+        ),
       );
       await tester.pump();
       await tester.tap(find.text('Save')); // Docked needs no extra fields.
@@ -140,7 +157,10 @@ void main() {
   testWidgets('helm voyage Edit reopens the ask-form', (tester) async {
     await pumpScreen(
       tester,
-      HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+      HomeDashboardScreen(
+        leaderboardService: noLeaderboardSync(),
+        photoService: noPhoto(),
+      ),
     );
     await tester.pump();
     await tester.tap(find.text('Save'));
@@ -336,7 +356,11 @@ void main() {
     final api = _FakeAuthApi();
     await pumpScreen(
       tester,
-      ProfileScreen(api: api, tokenStorage: _FakeTokenStorage('valid-token')),
+      ProfileScreen(
+        api: api,
+        tokenStorage: _FakeTokenStorage('valid-token'),
+        photoService: noPhoto(),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Crew Profile'), findsOneWidget);
@@ -344,15 +368,56 @@ void main() {
     expect(find.text('marcus@example.com'), findsOneWidget); // read-only email
     expect(find.text('Save Crew Details'), findsOneWidget);
     expect(find.text('Log Out'), findsOneWidget);
+    // No photo saved yet: offers to add one, not change one.
+    expect(find.text('Add Photo'), findsOneWidget);
+    expect(find.text('Change Photo'), findsNothing);
   });
+
+  testWidgets(
+    'profile screen picking a photo switches Add Photo to Change Photo',
+    (tester) async {
+      // The sync variant: testWidgets runs its body in a FakeAsync zone,
+      // which can't drive real OS-backed async I/O (the async
+      // Directory.createTemp hangs here the same way isolate-based sqflite
+      // did elsewhere in this suite) — sync file I/O is unaffected.
+      final dir = Directory.systemTemp.createTempSync('profile_photo_ui_test');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final pickedFile = File('${dir.path}/picked.jpg')
+        ..writeAsBytesSync([1, 2, 3]);
+      final photoService = _FakePhotoService()..toPick = pickedFile;
+
+      await pumpScreen(
+        tester,
+        ProfileScreen(
+          api: _FakeAuthApi(),
+          tokenStorage: _FakeTokenStorage('valid-token'),
+          photoService: photoService,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Add Photo'), findsOneWidget);
+
+      await tester.tap(find.text('Add Photo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Change Photo'), findsOneWidget);
+      expect(find.text('Add Photo'), findsNothing);
+    },
+  );
 
   testWidgets('profile logout clears token and returns to Welcome', (
     tester,
   ) async {
     final storage = _FakeTokenStorage('valid-token');
     final api = _FakeAuthApi();
-    await pumpScreen(tester, ProfileScreen(api: api, tokenStorage: storage));
+    await pumpScreen(
+      tester,
+      ProfileScreen(api: api, tokenStorage: storage, photoService: noPhoto()),
+    );
     await tester.pumpAndSettle();
+    // The profile photo picker at the top of the form can push "Log Out"
+    // below the fold on the test surface — scroll it into view first.
+    await tester.ensureVisible(find.text('Log Out'));
     await tester.tap(find.text('Log Out'));
     await tester.pumpAndSettle();
     expect(api.logoutCalls, 1);
@@ -458,4 +523,23 @@ class _FakeTokenStorage extends AuthTokenStorage {
 
   @override
   Future<void> clear() async => token = null;
+}
+
+/// In-memory [ProfilePhotoService] stand-in — avoids the real
+/// path_provider/image_picker platform channels, which have no mock
+/// registered in widget tests and would otherwise hang under pumpAndSettle.
+class _FakePhotoService extends ProfilePhotoService {
+  File? current;
+
+  /// What the next [pickFromGallery] call returns (and becomes [current]).
+  File? toPick;
+
+  @override
+  Future<File?> currentPhoto() async => current;
+
+  @override
+  Future<File?> pickFromGallery() async {
+    if (toPick != null) current = toPick;
+    return toPick;
+  }
 }
