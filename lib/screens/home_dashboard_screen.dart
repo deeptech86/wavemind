@@ -107,46 +107,54 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           // so a growing card up top — e.g. the Voyage Details form opening
           // its From/To/Days fields under the keyboard — can never overflow
           // a fixed-height header; it just scrolls into view instead.
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _DashboardHeader(repository: _repo),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _LeaderboardScoreBanner(
-                        totalKnots: _summary.totalKnots,
-                        rank: _rank,
-                        daysToGo: daysRemainingInChallengeWeek(),
-                        onTap: () => _open(
-                          context,
-                          const CommunityConnectScreen(
-                            initialTab: CrewTab.fleetSpirit,
+          //
+          // SizedBox.expand forces the scroll view to always fill the full
+          // body height even when content is shorter than the screen —
+          // SingleChildScrollView shrink-wraps to its content by default,
+          // which would otherwise cut the gradient behind it short and
+          // expose the bare (near-black) Scaffold background underneath.
+          child: SizedBox.expand(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _DashboardHeader(repository: _repo),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _LeaderboardScoreBanner(
+                          totalKnots: _summary.totalKnots,
+                          rank: _rank,
+                          daysToGo: daysRemainingInChallengeWeek(),
+                          onTap: () => _open(
+                            context,
+                            const CommunityConnectScreen(
+                              initialTab: CrewTab.fleetSpirit,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      const _SectionHeader(
-                        'Mental Helm Controls',
-                        trailing: 'Customize',
-                      ),
-                      const SizedBox(height: 16),
-                      _FeatureGrid(
-                        onHaven: () => _open(context, const HavenScreen()),
-                        onJournal: () =>
-                            _open(context, const JournalEntryScreen()),
-                        onCrew: () =>
-                            _open(context, const CommunityConnectScreen()),
-                        onReflect: () =>
-                            _open(context, const WeeklyInsightsScreen()),
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                        const _SectionHeader(
+                          'Mental Helm Controls',
+                          trailing: 'Customize',
+                        ),
+                        const SizedBox(height: 16),
+                        _FeatureGrid(
+                          onHaven: () => _open(context, const HavenScreen()),
+                          onJournal: () =>
+                              _open(context, const JournalEntryScreen()),
+                          onCrew: () =>
+                              _open(context, const CommunityConnectScreen()),
+                          onReflect: () =>
+                              _open(context, const WeeklyInsightsScreen()),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
