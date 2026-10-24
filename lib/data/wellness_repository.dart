@@ -125,6 +125,19 @@ class WellnessRepository {
     }, fallback: const []);
   }
 
+  /// The most recently logged mood check-in, or null if none has been filed.
+  Future<MoodCheckIn?> latestMoodCheckIn() {
+    return _guard<MoodCheckIn?>(() async {
+      final db = await _appDb.database;
+      final rows = await db.query(
+        'mood_check_ins',
+        orderBy: 'created_at DESC',
+        limit: 1,
+      );
+      return rows.isEmpty ? null : MoodCheckIn.fromMap(rows.first);
+    }, fallback: null);
+  }
+
   // --- Breathing ------------------------------------------------------------
 
   Future<void> recordBreathingSession({required int durationSeconds}) {

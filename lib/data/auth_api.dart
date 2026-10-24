@@ -4,7 +4,10 @@ import 'package:http/http.dart' as http;
 
 import '../core/app_config.dart';
 import 'models/account.dart';
+import 'models/crew_message.dart';
+import 'models/crew_mood_summary.dart';
 import 'models/leaderboard_entry.dart';
+import 'models/mood_state.dart';
 
 /// Thrown for any failure talking to the accounts backend, carrying a short,
 /// user-facing [message] the auth screens can surface directly.
@@ -24,7 +27,8 @@ class AuthApiException implements Exception {
 }
 
 /// Thin HTTP client for the TideWell accounts service (`/auth/*`, plus the
-/// account-scoped `/me/points` and `/leaderboard` endpoints).
+/// account-scoped `/me/points`, `/leaderboard`, `/me/mood`,
+/// `/crew/mood-summary`, and `/crew/message` endpoints).
 ///
 /// Follows the app's HTTP-client pattern: typed exceptions, [AppConfig] base URL, a
 /// sane request timeout, and clear messages that separate network failures from
@@ -193,6 +197,88 @@ class AuthApi {
       final decoded = jsonDecode(res.body) as Map<String, Object?>;
       final rows = (decoded['entries'] as List).cast<Map<String, Object?>>();
       return rows.map(LeaderboardEntry.fromJson).toList();
+    } catch (_) {
+      throw const AuthApiException('Received an unexpected response.');
+    }
+  }
+
+  /// Overwrites the caller's latest mood state. Only ever feeds the
+  /// anonymous crew-wide summary — never returned next to a name.
+  Future<void> updateMood(String token, MoodState state) async {
+    final res = await _send(
+      'PUT',
+      '/me/mood',
+      body: {'state': state.key},
+      token: token,
+    );
+    if (res.statusCode == 401) {
+      throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode != 200) {
+      throw AuthApiException('Server error (${res.statusCode}).');
+    }
+  }
+
+  /// Anonymous aggregate: the fraction of the crew currently reading "calm".
+  Future<CrewMoodSummary> crewMoodSummary(String token) async {
+    final res = await _send('GET', '/crew/mood-summary', token: token);
+    if (res.statusCode == 401) {
+      throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode != 200) {
+      throw AuthApiException('Server error (${res.statusCode}).');
+    }
+    try {
+      return CrewMoodSummary.fromJson(
+        jsonDecode(res.body) as Map<String, Object?>,
+      );
+    } catch (_) {
+      throw const AuthApiException('Received an unexpected response.');
+    }
+  }
+
+  /// Casts [body] as the one shared crew message, replacing whatever was
+  /// cast last.
+  Future<CrewMessage> postCrewMessage(String token, String body) async {
+    final res = await _send(
+      'PUT',
+      '/crew/message',
+      body: {'body': body},
+      token: token,
+    );
+    if (res.statusCode == 401) {
+      throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode == 422) {
+      throw const AuthApiException(
+        'Message is too long or empty.',
+        isAuthFailure: true,
+      );
+    }
+    if (res.statusCode != 200) {
+      throw AuthApiException('Server error (${res.statusCode}).');
+    }
+    try {
+      return CrewMessage.fromJson(jsonDecode(res.body) as Map<String, Object?>);
+    } catch (_) {
+      throw const AuthApiException('Received an unexpected response.');
+    }
+  }
+
+  /// The latest crew messages, newest first (empty if no one has cast one
+  /// yet) — capped server-side at 3.
+  Future<List<CrewMessage>> crewMessages(String token) async {
+    final res = await _send('GET', '/crew/message', token: token);
+    if (res.statusCode == 401) {
+      throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode != 200) {
+      throw AuthApiException('Server error (${res.statusCode}).');
+    }
+    try {
+      final decoded = jsonDecode(res.body) as Map<String, Object?>;
+      final rows = (decoded['messages'] as List).cast<Map<String, Object?>>();
+      return rows.map(CrewMessage.fromJson).toList();
     } catch (_) {
       throw const AuthApiException('Received an unexpected response.');
     }

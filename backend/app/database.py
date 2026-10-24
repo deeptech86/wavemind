@@ -70,19 +70,24 @@ def init_db() -> None:
                 sex           TEXT NOT NULL,
                 fleet_name    TEXT,
                 total_points  INTEGER NOT NULL DEFAULT 0,
+                latest_mood_state TEXT,
+                latest_mood_at    TEXT,
                 created_at    TEXT NOT NULL,
                 updated_at    TEXT NOT NULL
             )
             """
         )
-        # A pre-existing dev DB predates ``total_points`` — add it in place.
+        # A pre-existing dev DB predates these columns — add them in place.
         # ``CREATE TABLE IF NOT EXISTS`` above only covers a fresh DB.
-        try:
-            conn.execute(
-                "ALTER TABLE user ADD COLUMN total_points INTEGER NOT NULL DEFAULT 0"
-            )
-        except sqlite3.OperationalError:
-            pass  # column already exists
+        for ddl in (
+            "ALTER TABLE user ADD COLUMN total_points INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE user ADD COLUMN latest_mood_state TEXT",
+            "ALTER TABLE user ADD COLUMN latest_mood_at TEXT",
+        ):
+            try:
+                conn.execute(ddl)
+            except sqlite3.OperationalError:
+                pass  # column already exists
         # Opaque bearer sessions. One row per successful login/signup; deleted
         # on logout and ignored once ``expires_at`` has passed.
         conn.execute(
@@ -148,6 +153,45 @@ def init_db() -> None:
             )
             """
         )
+        # The shared "cast a float bottle" crew messages — an append-only
+        # log pruned to the latest CREW_MESSAGE_LIMIT rows on every cast
+        # (see set_crew_message), newest first. Attributed to the real
+        # account name at cast time.
+        old_schema = conn.execute(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'crew_message'"
+        ).fetchone()
+        if old_schema and "CHECK (id = 1)" in old_schema["sql"]:
+            # Pre-existing dev DB predates the multi-message design (it had
+            # a single pinned row) — migrate its one message across rather
+            # than discarding it.
+            conn.execute("ALTER TABLE crew_message RENAME TO crew_message_old")
+            conn.execute(
+                """
+                CREATE TABLE crew_message (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    body        TEXT NOT NULL,
+                    author_name TEXT NOT NULL DEFAULT '',
+                    posted_at   TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO crew_message (body, author_name, posted_at) "
+                "SELECT body, author_name, posted_at FROM crew_message_old"
+            )
+            conn.execute("DROP TABLE crew_message_old")
+        else:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS crew_message (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    body        TEXT NOT NULL,
+                    author_name TEXT NOT NULL DEFAULT '',
+                    posted_at   TEXT NOT NULL
+                )
+                """
+            )
         conn.commit()
 
 
@@ -311,6 +355,113 @@ def user_rank(user_id: int) -> int:
             (user_id,),
         ).fetchone()
         return int(row["rank"]) if row else 1
+
+
+# ---------------------------------------------------------------------------
+# Accounts — crew mood (Anchor Pool "Anonymized Crew Swell" card)
+# ---------------------------------------------------------------------------
+#
+# The five mood keys below mirror ``MoodState`` in
+# lib/data/models/mood_state.dart — keep the two lists in sync. "Calm" here
+# means the two calmest states (waveScore 4-5); everything aggregated is a
+# per-account *latest* mood only, never a history, and never attributed to a
+# name in any response — the summary is a pure anonymous percentage.
+MOOD_STATE_KEYS = (
+    "calm_sea",
+    "gentle_swell",
+    "choppy_water",
+    "drifting",
+    "high_storm",
+)
+_CALM_MOOD_KEYS = ("calm_sea", "gentle_swell")
+
+
+def set_user_mood(user_id: int, state: str) -> Optional[dict]:
+    """Overwrite the caller's latest mood state. Returns the updated row, or
+    ``None`` if the user does not exist."""
+    with _connect() as conn:
+        if conn.execute(
+            "SELECT 1 FROM user WHERE id = ?", (user_id,)
+        ).fetchone() is None:
+            return None
+        conn.execute(
+            "UPDATE user SET latest_mood_state = ?, latest_mood_at = ? "
+            "WHERE id = ?",
+            (state, _utc_now_iso(), user_id),
+        )
+        conn.commit()
+    return get_user_by_id(user_id)
+
+
+def crew_mood_summary() -> dict:
+    """Anonymous aggregate across every account's latest logged mood: what
+    fraction currently reads "calm", and how many accounts have logged a
+    mood at all (accounts that never have are excluded, not counted as
+    non-calm)."""
+    placeholders = ",".join("?" for _ in _CALM_MOOD_KEYS)
+    with _connect() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM user WHERE latest_mood_state IS NOT NULL"
+        ).fetchone()["n"]
+        calm = conn.execute(
+            f"SELECT COUNT(*) AS n FROM user "
+            f"WHERE latest_mood_state IN ({placeholders})",
+            _CALM_MOOD_KEYS,
+        ).fetchone()["n"]
+    percent = round(100 * calm / total) if total else 0
+    return {"calm_percent": percent, "total_logged": total}
+
+
+# ---------------------------------------------------------------------------
+# Crew message — the single "cast a float bottle" shared note
+# ---------------------------------------------------------------------------
+
+
+# Only the latest CREW_MESSAGE_LIMIT casts are ever kept — casting a new one
+# bumps everything else down a slot, and the oldest falls off past this.
+CREW_MESSAGE_LIMIT = 3
+
+
+def set_crew_message(body: str, author_name: str) -> dict:
+    """Append a newly cast crew message, attributed to [author_name], then
+    prune down to the latest [CREW_MESSAGE_LIMIT] — the rest just age out,
+    there is no separate delete step."""
+    now = _utc_now_iso()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO crew_message (body, author_name, posted_at) "
+            "VALUES (?, ?, ?)",
+            (body, author_name, now),
+        )
+        conn.execute(
+            """
+            DELETE FROM crew_message WHERE id NOT IN (
+                SELECT id FROM crew_message ORDER BY id DESC LIMIT ?
+            )
+            """,
+            (CREW_MESSAGE_LIMIT,),
+        )
+        conn.commit()
+    return {"body": body, "author_name": author_name, "posted_at": now}
+
+
+def get_crew_messages(limit: int = CREW_MESSAGE_LIMIT) -> list[dict]:
+    """The latest [limit] crew messages, newest first. Empty if no one has
+    cast one yet."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT body, author_name, posted_at FROM crew_message "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "body": r["body"],
+                "author_name": r["author_name"],
+                "posted_at": r["posted_at"],
+            }
+            for r in rows
+        ]
 
 
 # ---------------------------------------------------------------------------

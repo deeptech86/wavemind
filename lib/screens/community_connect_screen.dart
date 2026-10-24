@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../data/crew_message_service.dart';
+import '../data/crew_mood_service.dart';
 import '../data/health_data_service.dart';
 import '../data/leaderboard_service.dart';
+import '../data/models/crew_message.dart';
+import '../data/models/crew_mood_summary.dart';
 import '../data/models/leaderboard_entry.dart';
 import '../data/models/voyage_status.dart';
 import '../data/wellness_repository.dart';
@@ -9,14 +13,15 @@ import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/tide_bottom_nav.dart';
-import 'anonymous_chat_screen.dart';
 
 /// "Crew" screen (Stitch "crew_fleet_leaderboard" redesign).
 ///
 /// A two-part destination behind a segmented control:
-///   * **Anchor Pool** — the original community content (anonymized crew swell,
-///     cast-a-float-bottle, gratitude notes), unchanged, still linking to the
-///     anonymous chat.
+///   * **Anchor Pool** — anonymous crew-wide mood ("Anonymized Crew Swell",
+///     synced via [CrewMoodService]) plus "cast a float bottle": a single
+///     shared message, replaced each time someone casts a new one, synced
+///     via [CrewMessageService]. Both are real, backend-synced data — no
+///     mock competitors, no fake percentages.
 ///   * **Fleet Spirit** — a voyage-milestone / contribution / leaderboard view
 ///     ranked by real Fleet Knots, synced to the backend via
 ///     [LeaderboardService] — no fake competitor data.
@@ -30,10 +35,14 @@ class CommunityConnectScreen extends StatefulWidget {
     WellnessRepository? repository,
     HealthDataService? healthService,
     LeaderboardService? leaderboardService,
+    CrewMoodService? crewMoodService,
+    CrewMessageService? crewMessageService,
     this.initialTab = CrewTab.fleetSpirit,
   }) : _repository = repository,
        _healthService = healthService,
-       _leaderboardService = leaderboardService;
+       _leaderboardService = leaderboardService,
+       _crewMoodService = crewMoodService,
+       _crewMessageService = crewMessageService;
 
   final WellnessRepository? _repository;
 
@@ -43,6 +52,12 @@ class CommunityConnectScreen extends StatefulWidget {
 
   /// Optional injection point for tests.
   final LeaderboardService? _leaderboardService;
+
+  /// Optional injection point for tests.
+  final CrewMoodService? _crewMoodService;
+
+  /// Optional injection point for tests.
+  final CrewMessageService? _crewMessageService;
 
   /// The tab to show first. Defaults to [CrewTab.fleetSpirit].
   final CrewTab initialTab;
@@ -60,6 +75,10 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
       widget._repository ?? WellnessRepository();
   late final LeaderboardService _leaderboardService =
       widget._leaderboardService ?? LeaderboardService();
+  late final CrewMoodService _crewMoodService =
+      widget._crewMoodService ?? CrewMoodService();
+  late final CrewMessageService _crewMessageService =
+      widget._crewMessageService ?? CrewMessageService();
   late CrewTab _tab = widget.initialTab;
   ContributionSummary _summary = ContributionSummary.empty;
 
@@ -68,10 +87,21 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
   List<LeaderboardEntry>? _leaderboard;
   bool _leaderboardLoading = true;
 
+  /// Null while loading or if the sync failed — never a fabricated percent.
+  CrewMoodSummary? _crewMood;
+  bool _crewMoodLoading = true;
+
+  /// Null while loading or if the fetch failed; empty once loaded if
+  /// nothing has ever been cast. Newest first, capped at 3.
+  List<CrewMessage>? _crewMessages;
+  bool _crewMessageLoading = true;
+
   @override
   void initState() {
     super.initState();
     _loadSummary();
+    _loadCrewMood();
+    _loadCrewMessage();
   }
 
   Future<void> _loadSummary() async {
@@ -96,6 +126,39 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
     setState(() {
       _leaderboard = result;
       _leaderboardLoading = false;
+    });
+  }
+
+  Future<void> _loadCrewMood() async {
+    if (!mounted) return;
+    setState(() => _crewMoodLoading = true);
+    final latest = await _repo.latestMoodCheckIn();
+    CrewMoodSummary? result;
+    try {
+      result = await _crewMoodService.sync(latest?.state);
+    } catch (_) {
+      result = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _crewMood = result;
+      _crewMoodLoading = false;
+    });
+  }
+
+  Future<void> _loadCrewMessage() async {
+    if (!mounted) return;
+    setState(() => _crewMessageLoading = true);
+    List<CrewMessage>? result;
+    try {
+      result = await _crewMessageService.fetchLatest();
+    } catch (_) {
+      result = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _crewMessages = result;
+      _crewMessageLoading = false;
     });
   }
 
@@ -129,11 +192,12 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
                       const SizedBox(height: 20),
                       if (_tab == CrewTab.anchorPool)
                         _AnchorPoolView(
-                          onCast: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const AnonymousChatScreen(),
-                            ),
-                          ),
+                          crewMood: _crewMood,
+                          crewMoodLoading: _crewMoodLoading,
+                          crewMessages: _crewMessages,
+                          crewMessageLoading: _crewMessageLoading,
+                          crewMessageService: _crewMessageService,
+                          onMessagePosted: _loadCrewMessage,
                         )
                       else
                         _FleetSpiritView(
@@ -253,30 +317,50 @@ class _SegmentButton extends StatelessWidget {
 // ===========================================================================
 
 class _AnchorPoolView extends StatelessWidget {
-  const _AnchorPoolView({required this.onCast});
+  const _AnchorPoolView({
+    required this.crewMood,
+    required this.crewMoodLoading,
+    required this.crewMessages,
+    required this.crewMessageLoading,
+    required this.crewMessageService,
+    required this.onMessagePosted,
+  });
 
-  final VoidCallback onCast;
+  final CrewMoodSummary? crewMood;
+  final bool crewMoodLoading;
+  final List<CrewMessage>? crewMessages;
+  final bool crewMessageLoading;
+  final CrewMessageService crewMessageService;
+  final Future<void> Function() onMessagePosted;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _CrewMoodDashboard(),
+        _CrewMoodDashboard(summary: crewMood, loading: crewMoodLoading),
         const SizedBox(height: 20),
-        _EncourageBox(onCast: onCast),
+        _EncourageBox(service: crewMessageService, onPosted: onMessagePosted),
         const SizedBox(height: 20),
-        const _GratitudeWall(),
+        _GratitudeWall(messages: crewMessages, loading: crewMessageLoading),
       ],
     );
   }
 }
 
+/// Anonymous, crew-wide mood aggregate — synced via [CrewMoodService]. Never
+/// a fabricated percentage: while loading or if the sync fails, this shows a
+/// graceful placeholder instead of guessing.
 class _CrewMoodDashboard extends StatelessWidget {
-  const _CrewMoodDashboard();
+  const _CrewMoodDashboard({required this.summary, required this.loading});
+
+  final CrewMoodSummary? summary;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
+    final data = summary;
+    final isCalm = data != null && data.calmPercent >= 50;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -296,65 +380,153 @@ class _CrewMoodDashboard extends StatelessWidget {
                   style: AppTextStyles.titleMedium,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.seafoamFaint,
-                  borderRadius: BorderRadius.circular(6),
+              if (!loading && data != null && data.totalLogged > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isCalm ? AppColors.seafoamFaint : AppColors.sandFaint,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isCalm ? 'STEADY VIBE' : 'MIXED VIBE',
+                    style: AppTextStyles.badge,
+                  ),
                 ),
-                child: Text('STEADY VIBE', style: AppTextStyles.badge),
-              ),
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.glassFillFaint,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.teal, width: 4),
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.seafoam,
+                  ),
                 ),
-                child: Text('82%', style: AppTextStyles.headerTitle),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Calm or Steady Winds',
-                      style: AppTextStyles.bodyStrong.copyWith(
-                        color: AppColors.cream,
+            )
+          else if (data == null)
+            Text(
+              'Crew Swell is unavailable right now — check the backend '
+              'connection and reopen Crew.',
+              style: AppTextStyles.bodySmall,
+            )
+          else if (data.totalLogged == 0)
+            Text(
+              'No crew mood logged yet — log an Emotional Swell to be the '
+              'first voice in the crew aggregate.',
+              style: AppTextStyles.bodySmall,
+            )
+          else
+            Row(
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.glassFillFaint,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isCalm ? AppColors.teal : AppColors.sand,
+                      width: 4,
+                    ),
+                  ),
+                  child: Text(
+                    '${data.calmPercent}%',
+                    style: AppTextStyles.headerTitle,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isCalm
+                            ? 'Calm or Steady Winds'
+                            : 'Choppier Waters Today',
+                        style: AppTextStyles.bodyStrong.copyWith(
+                          color: AppColors.cream,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Aggregated state across all 18 watch members currently '
-                      'logged on.',
-                      style: AppTextStyles.caption,
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        "Aggregated across ${data.totalLogged} crew members' "
+                        'latest mood logs.',
+                        style: AppTextStyles.caption,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
   }
 }
 
-class _EncourageBox extends StatelessWidget {
-  const _EncourageBox({required this.onCast});
+/// Real compose box for the shared crew message: typing + "Cast to Fleet"
+/// posts via [CrewMessageService], replacing whatever was cast last. Not a
+/// chat — there is no thread, just the one current float bottle everyone
+/// sees under the Gratitude Wall.
+class _EncourageBox extends StatefulWidget {
+  const _EncourageBox({required this.service, required this.onPosted});
 
-  final VoidCallback onCast;
+  final CrewMessageService service;
+  final Future<void> Function() onPosted;
+
+  @override
+  State<_EncourageBox> createState() => _EncourageBoxState();
+}
+
+class _EncourageBoxState extends State<_EncourageBox> {
+  final _controller = TextEditingController();
+  bool _posting = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cast() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _posting) return;
+    setState(() => _posting = true);
+    try {
+      await widget.service.cast(text);
+      if (!mounted) return;
+      _controller.clear();
+      FocusScope.of(context).unfocus();
+      await widget.onPosted();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Cast to the fleet.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not cast your message. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final canCast = _controller.text.trim().isNotEmpty && !_posting;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -379,16 +551,32 @@ class _EncourageBox extends StatelessWidget {
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: AppColors.overlayDark,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              'Type a silent supportive message to be cast anonymously into the '
-              'mess deck display...',
+            child: TextField(
+              controller: _controller,
+              enabled: !_posting,
+              maxLength: 280,
+              maxLines: 3,
+              minLines: 1,
+              onChanged: (_) => setState(() {}),
               style: AppTextStyles.bodySmall.copyWith(
                 color: AppColors.tealTint,
+              ),
+              cursorColor: AppColors.white,
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                counterStyle: AppTextStyles.caption.copyWith(
+                  color: AppColors.tealTint,
+                ),
+                hintText:
+                    'Type a supportive message to cast to the whole crew...',
+                hintStyle: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.tealTint,
+                ),
               ),
             ),
           ),
@@ -398,17 +586,26 @@ class _EncourageBox extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: onCast,
+              onTap: canCast ? _cast : null,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 alignment: Alignment.center,
-                child: Text(
-                  'Cast to Fleet',
-                  style: AppTextStyles.buttonSmall.copyWith(
-                    color: AppColors.teal,
-                  ),
-                ),
+                child: _posting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.teal,
+                        ),
+                      )
+                    : Text(
+                        'Cast to Fleet',
+                        style: AppTextStyles.buttonSmall.copyWith(
+                          color: canCast ? AppColors.teal : AppColors.muted,
+                        ),
+                      ),
               ),
             ),
           ),
@@ -418,8 +615,19 @@ class _EncourageBox extends StatelessWidget {
   }
 }
 
+/// Shows the single real, backend-synced crew message — whoever cast a
+/// float bottle last, attributed by their real name. Never a fake note:
+/// while loading or if nothing has been cast yet, shows a plain fallback.
+/// Shows the latest (up to 3) real, backend-synced crew messages, newest
+/// first — each attributed by the real sender's name. Casting a new one
+/// bumps the others down a slot and the oldest falls off past 3. Never a
+/// fake note: while loading or if nothing has been cast yet, shows a plain
+/// fallback instead.
 class _GratitudeWall extends StatelessWidget {
-  const _GratitudeWall();
+  const _GratitudeWall({required this.messages, required this.loading});
+
+  final List<CrewMessage>? messages;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -431,27 +639,48 @@ class _GratitudeWall extends StatelessWidget {
           style: AppTextStyles.titleMedium.copyWith(color: AppColors.cream),
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 120,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: const [
-              _GratitudeNote(
-                text:
-                    "“Grateful for the chef's fresh sourdough this morning. "
-                    'Little things make the watch better.”',
-                author: 'Anonymous Deckhand',
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.seafoam,
+                ),
               ),
-              SizedBox(width: 10),
-              _GratitudeNote(
-                text:
-                    '“Clean water line finally fixed. Good hot shower was '
-                    'legendary.”',
-                author: 'Anonymous Engineer',
+            ),
+          )
+        else if (messages == null || messages!.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.glassFillFaint,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.glassBorderSoft),
+            ),
+            child: Text(
+              'No gratitude notes yet — cast a float bottle above to be the '
+              'first.',
+              style: AppTextStyles.bodySmall,
+            ),
+          )
+        else
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: messages!.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (context, i) => _GratitudeNote(
+                text: messages![i].body,
+                author: messages![i].authorName,
               ),
-            ],
+            ),
           ),
-        ),
       ],
     );
   }

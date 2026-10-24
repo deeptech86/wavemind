@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tidewell_app/data/auth_api.dart';
 import 'package:tidewell_app/data/auth_token_storage.dart';
+import 'package:tidewell_app/data/crew_message_service.dart';
+import 'package:tidewell_app/data/crew_mood_service.dart';
 import 'package:tidewell_app/data/leaderboard_service.dart';
 import 'package:tidewell_app/data/models/account.dart';
 import 'package:tidewell_app/screens/auth_gate.dart';
@@ -11,7 +13,6 @@ import 'package:tidewell_app/screens/login_screen.dart';
 import 'package:tidewell_app/screens/profile_screen.dart';
 import 'package:tidewell_app/screens/signup_screen.dart';
 import 'package:tidewell_app/screens/welcome_screen.dart';
-import 'package:tidewell_app/screens/anonymous_chat_screen.dart';
 import 'package:tidewell_app/screens/cabin_dominoes_screen.dart';
 import 'package:tidewell_app/screens/community_connect_screen.dart';
 import 'package:tidewell_app/screens/guided_breathing_screen.dart';
@@ -36,10 +37,15 @@ void main() {
 
   // The real AuthTokenStorage hits a platform channel with no mock handler
   // registered in widget tests and never resolves — every Helm/Crew screen
-  // construction below must inject this instead so the leaderboard sync
-  // degrades to "no session" immediately rather than hanging.
+  // construction below must inject these instead so every backend sync
+  // degrades to "no session" immediately rather than hanging (fatal under
+  // pumpAndSettle, which never returns while a future never resolves).
   LeaderboardService noLeaderboardSync() =>
       LeaderboardService(tokenStorage: _FakeTokenStorage(null));
+  CrewMoodService noCrewMoodSync() =>
+      CrewMoodService(tokenStorage: _FakeTokenStorage(null));
+  CrewMessageService noCrewMessageSync() =>
+      CrewMessageService(tokenStorage: _FakeTokenStorage(null));
 
   testWidgets('mood check-in renders its sections', (tester) async {
     await pumpScreen(tester, const MoodCheckInScreen());
@@ -147,7 +153,11 @@ void main() {
   testWidgets('crew renders the fleet spirit tab by default', (tester) async {
     await pumpScreen(
       tester,
-      CommunityConnectScreen(leaderboardService: noLeaderboardSync()),
+      CommunityConnectScreen(
+        leaderboardService: noLeaderboardSync(),
+        crewMoodService: noCrewMoodSync(),
+        crewMessageService: noCrewMessageSync(),
+      ),
     );
     await tester
         .pumpAndSettle(); // let the Voyage Milestone + leaderboard sync settle
@@ -177,7 +187,11 @@ void main() {
   ) async {
     await pumpScreen(
       tester,
-      CommunityConnectScreen(leaderboardService: noLeaderboardSync()),
+      CommunityConnectScreen(
+        leaderboardService: noLeaderboardSync(),
+        crewMoodService: noCrewMoodSync(),
+        crewMessageService: noCrewMessageSync(),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Leadership Board'), findsOneWidget);
@@ -185,6 +199,25 @@ void main() {
     await tester.pump();
     expect(find.text('Cast to Fleet'), findsOneWidget);
     expect(find.text('Leadership Board'), findsNothing);
+    // No backend reachable in widget tests: both real Anchor Pool features
+    // degrade gracefully rather than showing the old static placeholders.
+    expect(find.text('Anonymized Crew Swell'), findsOneWidget);
+    expect(
+      find.text(
+        'Crew Swell is unavailable right now — check the backend '
+        'connection and reopen Crew.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('82%'), findsNothing);
+    expect(
+      find.text(
+        'No gratitude notes yet — cast a float bottle above to be the '
+        'first.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Anonymous Deckhand'), findsNothing);
   });
 
   testWidgets('crew opens directly on Fleet Spirit via initialTab', (
@@ -195,6 +228,8 @@ void main() {
       CommunityConnectScreen(
         initialTab: CrewTab.fleetSpirit,
         leaderboardService: noLeaderboardSync(),
+        crewMoodService: noCrewMoodSync(),
+        crewMessageService: noCrewMessageSync(),
       ),
     );
     await tester.pumpAndSettle();
@@ -241,12 +276,6 @@ void main() {
     await pumpScreen(tester, const MindfulGameScreen());
     expect(find.text('Calm Your Waves'), findsOneWidget);
     expect(find.text('Hint'), findsOneWidget);
-  });
-
-  testWidgets('anonymous chat renders the thread', (tester) async {
-    await pumpScreen(tester, const AnonymousChatScreen());
-    expect(find.text('Safe Harbor Chat'), findsOneWidget);
-    expect(find.text('Quiet Lighthouse'), findsWidgets);
   });
 
   testWidgets('knot master renders its tying arena', (tester) async {

@@ -11,6 +11,10 @@ cross-device wellness competitions):
     PATCH /auth/me                       -> partial profile update (name/age/sex/fleet_name)
     PUT   /me/points                     -> overwrite the caller's Fleet Knots total (Bearer-protected)
     GET   /leaderboard                   -> top N accounts by points + the caller's own row (Bearer-protected)
+    PUT   /me/mood                       -> overwrite the caller's latest mood state (Bearer-protected)
+    GET   /crew/mood-summary             -> anonymous % of crew currently "calm" (Bearer-protected)
+    PUT   /crew/message                  -> cast a new crew message, bumping older ones down (Bearer-protected)
+    GET   /crew/message                  -> the latest 3 crew messages, newest first (Bearer-protected)
 
 Content catalog (unrelated to accounts, open):
     GET   /health                       -> liveness probe
@@ -37,7 +41,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -113,6 +117,33 @@ class LeaderboardEntryOut(BaseModel):
 
 class LeaderboardOut(BaseModel):
     entries: list[LeaderboardEntryOut]
+
+
+class MoodIn(BaseModel):
+    # Mirrors MoodState.key in lib/data/models/mood_state.dart.
+    state: Literal[
+        "calm_sea", "gentle_swell", "choppy_water", "drifting", "high_storm"
+    ]
+
+
+class CrewMoodSummaryOut(BaseModel):
+    calm_percent: int
+    total_logged: int
+
+
+class CrewMessageIn(BaseModel):
+    body: str = Field(..., min_length=1, max_length=280)
+
+
+class CrewMessageOut(BaseModel):
+    body: str
+    author_name: str
+    posted_at: str
+
+
+class CrewMessagesOut(BaseModel):
+    # Newest first, capped at database.CREW_MESSAGE_LIMIT (currently 3).
+    messages: list[CrewMessageOut]
 
 
 # --- Content catalog schemas ------------------------------------------------
@@ -368,6 +399,41 @@ def read_leaderboard(
             }
         )
     return {"entries": entries}
+
+
+@app.put("/me/mood")
+def update_my_mood(payload: MoodIn, user: dict = Depends(current_user)) -> dict:
+    """Overwrite the caller's latest mood state. Only ever feeds the
+    anonymous crew-wide summary below — never returned next to a name."""
+    updated = database.set_user_mood(user["id"], payload.state)
+    if updated is None:  # pragma: no cover - current_user guarantees existence
+        raise HTTPException(status_code=404, detail="user not found")
+    return {"state": updated["latest_mood_state"]}
+
+
+@app.get("/crew/mood-summary", response_model=CrewMoodSummaryOut)
+def read_crew_mood_summary(user: dict = Depends(current_user)) -> dict:
+    """Anonymous aggregate: what fraction of accounts with a logged mood are
+    currently "calm", across the whole crew — never attributed to anyone."""
+    return database.crew_mood_summary()
+
+
+@app.put("/crew/message", response_model=CrewMessageOut)
+def cast_crew_message(
+    payload: CrewMessageIn, user: dict = Depends(current_user)
+) -> dict:
+    """Cast a new crew message, attributed to the caller's real account
+    name. Bumps every older message down a slot; only the latest
+    database.CREW_MESSAGE_LIMIT are kept — the rest just age out.
+    """
+    return database.set_crew_message(payload.body.strip(), user["name"])
+
+
+@app.get("/crew/message", response_model=CrewMessagesOut)
+def read_crew_messages(user: dict = Depends(current_user)) -> dict:
+    """The latest crew messages, newest first — empty if no one has cast
+    one yet."""
+    return {"messages": database.get_crew_messages()}
 
 
 # ---------------------------------------------------------------------------
