@@ -316,7 +316,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               const SizedBox(height: 28),
                               AuthPrimaryButton(
-                                label: 'Save Crew Details',
+                                label: 'Save',
                                 busy: _saving,
                                 onTap: _save,
                               ),
@@ -394,7 +394,7 @@ class _LogoutButton extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-            border: Border.all(color: AppColors.stormRed),
+            border: Border.all(color: AppColors.white),
           ),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           child: Center(
@@ -404,13 +404,13 @@ class _LogoutButton extends StatelessWidget {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: AppColors.stormRed,
+                      color: AppColors.white,
                     ),
                   )
                 : Text(
                     'Log Out',
                     style: AppTextStyles.buttonLarge.copyWith(
-                      color: AppColors.stormRed,
+                      color: AppColors.white,
                     ),
                   ),
           ),

@@ -366,7 +366,7 @@ void main() {
     expect(find.text('Crew Profile'), findsOneWidget);
     expect(find.text('Marcus Thorne'), findsOneWidget); // name field value
     expect(find.text('marcus@example.com'), findsOneWidget); // read-only email
-    expect(find.text('Save Crew Details'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
     expect(find.text('Log Out'), findsOneWidget);
     // No photo saved yet: offers to add one, not change one.
     expect(find.text('Add Photo'), findsOneWidget);
