@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/app_config.dart';
 import 'models/account.dart';
+import 'models/leaderboard_entry.dart';
 
 /// Thrown for any failure talking to the accounts backend, carrying a short,
 /// user-facing [message] the auth screens can surface directly.
@@ -22,7 +23,8 @@ class AuthApiException implements Exception {
   String toString() => 'AuthApiException: $message';
 }
 
-/// Thin HTTP client for the TideWell accounts service (`/auth/*`).
+/// Thin HTTP client for the TideWell accounts service (`/auth/*`, plus the
+/// account-scoped `/me/points` and `/leaderboard` endpoints).
 ///
 /// Follows the app's HTTP-client pattern: typed exceptions, [AppConfig] base URL, a
 /// sane request timeout, and clear messages that separate network failures from
@@ -149,6 +151,51 @@ class AuthApi {
   /// by callers (the local token is cleared regardless).
   Future<void> logout(String token) async {
     await _send('POST', '/auth/logout', token: token);
+  }
+
+  /// Overwrites the caller's Fleet Knots total on the backend. Always the
+  /// whole current total (never a delta) — the on-device ledger stays the
+  /// source of truth for *how* it was earned.
+  Future<void> updatePoints(String token, int totalPoints) async {
+    final res = await _send(
+      'PUT',
+      '/me/points',
+      body: {'total_points': totalPoints},
+      token: token,
+    );
+    if (res.statusCode == 401) {
+      throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode != 200) {
+      throw AuthApiException('Server error (${res.statusCode}).');
+    }
+  }
+
+  /// The real, multi-user leaderboard: the top [limit] accounts by points,
+  /// plus the caller's own row (with their true rank) if they aren't already
+  /// in that top slice.
+  Future<List<LeaderboardEntry>> leaderboard(
+    String token, {
+    int limit = 4,
+  }) async {
+    final res = await _send(
+      'GET',
+      '/leaderboard?limit=$limit',
+      token: token,
+    );
+    if (res.statusCode == 401) {
+      throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode != 200) {
+      throw AuthApiException('Server error (${res.statusCode}).');
+    }
+    try {
+      final decoded = jsonDecode(res.body) as Map<String, Object?>;
+      final rows = (decoded['entries'] as List).cast<Map<String, Object?>>();
+      return rows.map(LeaderboardEntry.fromJson).toList();
+    } catch (_) {
+      throw const AuthApiException('Received an unexpected response.');
+    }
   }
 
   Future<http.Response> _send(

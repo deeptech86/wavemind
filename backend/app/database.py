@@ -69,11 +69,20 @@ def init_db() -> None:
                 age           INTEGER NOT NULL,
                 sex           TEXT NOT NULL,
                 fleet_name    TEXT,
+                total_points  INTEGER NOT NULL DEFAULT 0,
                 created_at    TEXT NOT NULL,
                 updated_at    TEXT NOT NULL
             )
             """
         )
+        # A pre-existing dev DB predates ``total_points`` — add it in place.
+        # ``CREATE TABLE IF NOT EXISTS`` above only covers a fresh DB.
+        try:
+            conn.execute(
+                "ALTER TABLE user ADD COLUMN total_points INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
         # Opaque bearer sessions. One row per successful login/signup; deleted
         # on logout and ignored once ``expires_at`` has passed.
         conn.execute(
@@ -249,6 +258,59 @@ def update_user(user_id: int, fields: dict[str, Any]) -> Optional[dict]:
             )
             conn.commit()
     return get_user_by_id(user_id)
+
+
+# ---------------------------------------------------------------------------
+# Accounts — leaderboard points
+# ---------------------------------------------------------------------------
+#
+# ``total_points`` mirrors the device's local Fleet Knots ledger total (the
+# device is the source of truth for *how* points were earned; the backend
+# only ever sees the running total, pushed wholesale on each sync — never a
+# delta). This is what makes real, multi-user ranking possible at all.
+
+
+def set_user_points(user_id: int, total_points: int) -> Optional[dict]:
+    """Overwrite the caller's points total. Returns the updated row, or
+    ``None`` if the user does not exist."""
+    with _connect() as conn:
+        if conn.execute(
+            "SELECT 1 FROM user WHERE id = ?", (user_id,)
+        ).fetchone() is None:
+            return None
+        conn.execute(
+            "UPDATE user SET total_points = ?, updated_at = ? WHERE id = ?",
+            (total_points, _utc_now_iso(), user_id),
+        )
+        conn.commit()
+    return get_user_by_id(user_id)
+
+
+def leaderboard_top(limit: int) -> list[dict]:
+    """The top ``limit`` users by points, highest first. Ties break on id (so
+    the order is stable) — earliest-registered account wins a tie."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM user ORDER BY total_points DESC, id ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [_user_row_to_dict(r) for r in rows]
+
+
+def user_rank(user_id: int) -> int:
+    """1-indexed rank among all accounts by points — the count of users
+    strictly ahead, plus one. A user with no points data yet ranks last."""
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT 1 + (
+                SELECT COUNT(*) FROM user
+                WHERE total_points > (SELECT total_points FROM user WHERE id = ?)
+            ) AS rank
+            """,
+            (user_id,),
+        ).fetchone()
+        return int(row["rank"]) if row else 1
 
 
 # ---------------------------------------------------------------------------

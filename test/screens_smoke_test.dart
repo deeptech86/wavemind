@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tidewell_app/data/auth_api.dart';
 import 'package:tidewell_app/data/auth_token_storage.dart';
+import 'package:tidewell_app/data/leaderboard_service.dart';
 import 'package:tidewell_app/data/models/account.dart';
 import 'package:tidewell_app/screens/auth_gate.dart';
 import 'package:tidewell_app/screens/home_dashboard_screen.dart';
@@ -33,6 +34,13 @@ void main() {
     await tester.pump();
   }
 
+  // The real AuthTokenStorage hits a platform channel with no mock handler
+  // registered in widget tests and never resolves — every Helm/Crew screen
+  // construction below must inject this instead so the leaderboard sync
+  // degrades to "no session" immediately rather than hanging.
+  LeaderboardService noLeaderboardSync() =>
+      LeaderboardService(tokenStorage: _FakeTokenStorage(null));
+
   testWidgets('mood check-in renders its sections', (tester) async {
     await pumpScreen(tester, const MoodCheckInScreen());
     expect(find.text('Log Emotional Swell'), findsOneWidget);
@@ -52,34 +60,52 @@ void main() {
     expect(find.text('DAILY SEAPROMPT'), findsOneWidget);
   });
 
-  testWidgets('helm shows the voyage to victory banner (not the old story promo)',
-      (tester) async {
-    await pumpScreen(tester, const HomeDashboardScreen());
-    await tester.pump(); // let the (gracefully-degrading) summary load settle
-    expect(find.text('VOYAGE TO VICTORY'), findsOneWidget);
-    expect(find.text('0 Fleet Knots'), findsOneWidget); // empty ledger default
-    // Last among the 4 fixed mock competitors with 0 knots. The days-to-go
-    // suffix is date-dependent, so match on the stable rank prefix only.
-    expect(find.textContaining('Rank #5'), findsOneWidget);
-    // The removed Off-Watch Story banner must be gone from Helm.
-    expect(find.text('OFF-WATCH STORY'), findsNothing);
-    expect(find.text('The Lighthouse at Cape Horn'), findsNothing);
-  });
+  testWidgets(
+    'helm shows the voyage to victory banner (not the old story promo)',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+      );
+      await tester
+          .pumpAndSettle(); // let the backend rank sync settle (fails gracefully)
+      expect(find.text('VOYAGE TO VICTORY'), findsOneWidget);
+      expect(
+        find.text('0 Fleet Knots'),
+        findsOneWidget,
+      ); // empty ledger default
+      // No backend reachable in widget tests: the rank degrades gracefully
+      // (no fake rank) rather than showing a mock-derived number.
+      expect(find.textContaining('Rank #'), findsNothing);
+      // The removed Off-Watch Story banner must be gone from Helm.
+      expect(find.text('OFF-WATCH STORY'), findsNothing);
+      expect(find.text('The Lighthouse at Cape Horn'), findsNothing);
+    },
+  );
 
-  testWidgets('helm voyage details starts on the ask-form with no saved status',
-      (tester) async {
-    await pumpScreen(tester, const HomeDashboardScreen());
-    await tester.pump();
-    expect(find.text('Voyage Details'), findsOneWidget);
-    expect(find.text('Docked'), findsOneWidget);
-    expect(find.text('Voyage'), findsOneWidget);
-    // Voyage-only fields stay hidden until that radio is selected.
-    expect(find.text('FROM'), findsNothing);
-  });
+  testWidgets(
+    'helm voyage details starts on the ask-form with no saved status',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+      );
+      await tester.pump();
+      expect(find.text('Voyage Details'), findsOneWidget);
+      expect(find.text('Docked'), findsOneWidget);
+      expect(find.text('Voyage'), findsOneWidget);
+      // Voyage-only fields stay hidden until that radio is selected.
+      expect(find.text('FROM'), findsNothing);
+    },
+  );
 
-  testWidgets('helm voyage form reveals From/To/Days when Voyage is picked',
-      (tester) async {
-    await pumpScreen(tester, const HomeDashboardScreen());
+  testWidgets('helm voyage form reveals From/To/Days when Voyage is picked', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+    );
     await tester.pump();
     await tester.tap(find.text('Voyage'));
     await tester.pump();
@@ -88,20 +114,28 @@ void main() {
     expect(find.text('DAYS REMAINING'), findsOneWidget);
   });
 
-  testWidgets('helm voyage saving Docked collapses to a summary + Edit button',
-      (tester) async {
-    await pumpScreen(tester, const HomeDashboardScreen());
-    await tester.pump();
-    await tester.tap(find.text('Save')); // Docked needs no extra fields.
-    await tester.pump();
-    expect(find.text('Voyage Details'), findsNothing);
-    expect(find.text('Docked'), findsOneWidget);
-    expect(find.text('No active voyage'), findsOneWidget);
-    expect(find.text('Edit'), findsOneWidget);
-  });
+  testWidgets(
+    'helm voyage saving Docked collapses to a summary + Edit button',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Save')); // Docked needs no extra fields.
+      await tester.pump();
+      expect(find.text('Voyage Details'), findsNothing);
+      expect(find.text('Docked'), findsOneWidget);
+      expect(find.text('No active voyage'), findsOneWidget);
+      expect(find.text('Edit'), findsOneWidget);
+    },
+  );
 
   testWidgets('helm voyage Edit reopens the ask-form', (tester) async {
-    await pumpScreen(tester, const HomeDashboardScreen());
+    await pumpScreen(
+      tester,
+      HomeDashboardScreen(leaderboardService: noLeaderboardSync()),
+    );
     await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pump();
@@ -111,12 +145,16 @@ void main() {
   });
 
   testWidgets('crew renders the fleet spirit tab by default', (tester) async {
-    await pumpScreen(tester, const CommunityConnectScreen());
-    await tester.pump(); // let the Voyage Milestone card's async load settle
+    await pumpScreen(
+      tester,
+      CommunityConnectScreen(leaderboardService: noLeaderboardSync()),
+    );
+    await tester
+        .pumpAndSettle(); // let the Voyage Milestone + leaderboard sync settle
     // "Crew" appears twice: the screen header and the bottom-nav tab label.
     expect(find.text('Crew'), findsWidgets);
     expect(find.text('Fleet Spirit'), findsOneWidget);
-    expect(find.text('Fleet Solidarity Log'), findsOneWidget);
+    expect(find.text('Leadership Board'), findsOneWidget);
     // Anchor Pool content is not shown until that tab is selected.
     expect(find.text('Cast to Fleet'), findsNothing);
     // No voyage saved (nothing to read with no native DB in widget tests):
@@ -126,17 +164,27 @@ void main() {
       find.text('Set sail from the Helm to track your voyage here.'),
       findsOneWidget,
     );
+    // No backend reachable in widget tests: the real leaderboard degrades
+    // gracefully (no fake competitor rows) rather than showing mock data.
+    expect(
+      find.textContaining('Leadership Board is unavailable'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('crew tabs switch between fleet spirit and anchor pool', (
     tester,
   ) async {
-    await pumpScreen(tester, const CommunityConnectScreen());
-    expect(find.text('Fleet Solidarity Log'), findsOneWidget);
+    await pumpScreen(
+      tester,
+      CommunityConnectScreen(leaderboardService: noLeaderboardSync()),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Leadership Board'), findsOneWidget);
     await tester.tap(find.text('Anchor Pool'));
     await tester.pump();
     expect(find.text('Cast to Fleet'), findsOneWidget);
-    expect(find.text('Fleet Solidarity Log'), findsNothing);
+    expect(find.text('Leadership Board'), findsNothing);
   });
 
   testWidgets('crew opens directly on Fleet Spirit via initialTab', (
@@ -144,16 +192,18 @@ void main() {
   ) async {
     await pumpScreen(
       tester,
-      const CommunityConnectScreen(initialTab: CrewTab.fleetSpirit),
+      CommunityConnectScreen(
+        initialTab: CrewTab.fleetSpirit,
+        leaderboardService: noLeaderboardSync(),
+      ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
     // Lands on the leaderboard immediately — no tab tap required.
-    expect(find.text('Fleet Solidarity Log'), findsOneWidget);
-    expect(find.text('Bosun Liam S.'), findsOneWidget);
+    expect(find.text('Leadership Board'), findsOneWidget);
     expect(find.text('YOUR CONTRIBUTION'), findsOneWidget);
-    // Rank badge sits alongside the streak/sea-logs badges and the sync
-    // button in a single horizontal Wrap, not stacked below them.
-    expect(find.text('Rank #5'), findsOneWidget);
+    // No backend reachable in widget tests: the rank badge degrades
+    // gracefully rather than showing a fake number.
+    expect(find.text('Rank —'), findsOneWidget);
   });
 
   testWidgets('haven hub renders its sections', (tester) async {
@@ -272,10 +322,7 @@ void main() {
   ) async {
     final storage = _FakeTokenStorage('valid-token');
     final api = _FakeAuthApi();
-    await pumpScreen(
-      tester,
-      ProfileScreen(api: api, tokenStorage: storage),
-    );
+    await pumpScreen(tester, ProfileScreen(api: api, tokenStorage: storage));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Log Out'));
     await tester.pumpAndSettle();

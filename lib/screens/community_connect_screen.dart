@@ -1,21 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../data/health_data_service.dart';
+import '../data/leaderboard_service.dart';
+import '../data/models/leaderboard_entry.dart';
 import '../data/models/voyage_status.dart';
 import '../data/wellness_repository.dart';
-import '../data/wellness_stats.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/tide_bottom_nav.dart';
 import 'anonymous_chat_screen.dart';
-
-/// The user's live rank among the fixed mock competitor roster, derived from
-/// their real Fleet Knots total. Exposed (rather than the roster itself) so
-/// other screens — e.g. Helm's Fleet Standing banner — can show the same rank
-/// without duplicating or exposing the mock leaderboard data.
-int currentFleetRank(int totalKnots) =>
-    WellnessStats.rankAmong(totalKnots, _Leaderboard.competitorKnots);
 
 /// "Crew" screen (Stitch "crew_fleet_leaderboard" redesign).
 ///
@@ -23,8 +17,9 @@ int currentFleetRank(int totalKnots) =>
 ///   * **Anchor Pool** — the original community content (anonymized crew swell,
 ///     cast-a-float-bottle, gratitude notes), unchanged, still linking to the
 ///     anonymous chat.
-///   * **Fleet Spirit** — a new voyage-milestone / contribution / leaderboard
-///     view ranked by "knots". Static data for Stage 1.
+///   * **Fleet Spirit** — a voyage-milestone / contribution / leaderboard view
+///     ranked by real Fleet Knots, synced to the backend via
+///     [LeaderboardService] — no fake competitor data.
 ///
 /// Fleet Spirit is the default — the individual weekly-challenge competition
 /// is the primary reason to open Crew now — but a caller can still request
@@ -34,15 +29,20 @@ class CommunityConnectScreen extends StatefulWidget {
     super.key,
     WellnessRepository? repository,
     HealthDataService? healthService,
+    LeaderboardService? leaderboardService,
     this.initialTab = CrewTab.fleetSpirit,
   }) : _repository = repository,
-       _healthService = healthService;
+       _healthService = healthService,
+       _leaderboardService = leaderboardService;
 
   final WellnessRepository? _repository;
 
   /// Optional injection point for tests. In production the health-sync button
   /// builds its own [HealthDataService]; nothing it reads is ever persisted.
   final HealthDataService? _healthService;
+
+  /// Optional injection point for tests.
+  final LeaderboardService? _leaderboardService;
 
   /// The tab to show first. Defaults to [CrewTab.fleetSpirit].
   final CrewTab initialTab;
@@ -58,8 +58,15 @@ enum CrewTab { anchorPool, fleetSpirit }
 class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
   late final WellnessRepository _repo =
       widget._repository ?? WellnessRepository();
+  late final LeaderboardService _leaderboardService =
+      widget._leaderboardService ?? LeaderboardService();
   late CrewTab _tab = widget.initialTab;
   ContributionSummary _summary = ContributionSummary.empty;
+
+  /// Null while loading or if the sync failed — callers must never fall back
+  /// to fake rows, only show a graceful "unavailable" state.
+  List<LeaderboardEntry>? _leaderboard;
+  bool _leaderboardLoading = true;
 
   @override
   void initState() {
@@ -71,6 +78,25 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
     final summary = await _repo.contributionSummary();
     if (!mounted) return;
     setState(() => _summary = summary);
+    await _syncLeaderboard(summary.totalKnots);
+  }
+
+  Future<void> _syncLeaderboard(int totalKnots) async {
+    if (!mounted) return;
+    setState(() => _leaderboardLoading = true);
+    List<LeaderboardEntry>? result;
+    try {
+      result = await _leaderboardService.sync(totalKnots);
+    } catch (_) {
+      // Network/server failure: leave result null so the UI shows its
+      // "unavailable" state rather than any fabricated data.
+      result = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _leaderboard = result;
+      _leaderboardLoading = false;
+    });
   }
 
   @override
@@ -115,6 +141,8 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
                           repository: _repo,
                           healthService: widget._healthService,
                           onSynced: _loadSummary,
+                          leaderboard: _leaderboard,
+                          leaderboardLoading: _leaderboardLoading,
                         ),
                     ],
                   ),
@@ -471,7 +499,7 @@ class _GratitudeNote extends StatelessWidget {
 }
 
 // ===========================================================================
-// Fleet Spirit view (new — static Stage 1 data)
+// Fleet Spirit view — real, backend-synced leaderboard (no mock competitors)
 // ===========================================================================
 
 class _FleetSpiritView extends StatelessWidget {
@@ -479,6 +507,8 @@ class _FleetSpiritView extends StatelessWidget {
     required this.summary,
     required this.repository,
     required this.onSynced,
+    required this.leaderboard,
+    required this.leaderboardLoading,
     this.healthService,
   });
 
@@ -486,12 +516,23 @@ class _FleetSpiritView extends StatelessWidget {
   final WellnessRepository repository;
   final HealthDataService? healthService;
 
-  /// Called after a successful health sync so the parent reloads the summary.
+  /// Null while loading or if the last sync failed.
+  final List<LeaderboardEntry>? leaderboard;
+  final bool leaderboardLoading;
+
+  /// Called after a successful health sync so the parent reloads the summary
+  /// (and re-syncs the leaderboard with the new total).
   final Future<void> Function() onSynced;
 
   @override
   Widget build(BuildContext context) {
-    final rank = currentFleetRank(summary.totalKnots);
+    int? myRank;
+    for (final entry in leaderboard ?? const <LeaderboardEntry>[]) {
+      if (entry.isMe) {
+        myRank = entry.rank;
+        break;
+      }
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -499,13 +540,16 @@ class _FleetSpiritView extends StatelessWidget {
         const SizedBox(height: 20),
         _ContributionCard(
           summary: summary,
-          rank: rank,
+          rank: myRank,
           repository: repository,
           healthService: healthService,
           onSynced: onSynced,
         ),
         const SizedBox(height: 24),
-        _LeaderboardSection(summary: summary),
+        _LeaderboardSection(
+          entries: leaderboard,
+          loading: leaderboardLoading,
+        ),
         const SizedBox(height: 20),
         const _KnotsInfoDeck(),
       ],
@@ -685,7 +729,9 @@ class _ContributionCard extends StatelessWidget {
   });
 
   final ContributionSummary summary;
-  final int rank;
+
+  /// Null while the leaderboard sync hasn't resolved yet (loading or failed).
+  final int? rank;
   final WellnessRepository repository;
   final HealthDataService? healthService;
   final Future<void> Function() onSynced;
@@ -758,7 +804,7 @@ class _ContributionCard extends StatelessWidget {
               Expanded(
                 child: _KnotBadge(
                   icon: Icons.military_tech,
-                  label: 'Rank #$rank',
+                  label: rank != null ? 'Rank #$rank' : 'Rank —',
                   color: AppColors.cream,
                 ),
               ),
@@ -999,92 +1045,29 @@ class _KnotBadge extends StatelessWidget {
   }
 }
 
-/// A single leaderboard competitor. The four non-user crew are fixed mock data
-/// (there is no multi-user backend); only the "You" row is backed by real
-/// on-device stats.
-class _LeaderEntry {
-  const _LeaderEntry({
-    required this.initials,
-    required this.color,
-    required this.name,
-    required this.note,
-    required this.knots,
-    this.tag,
-    this.isUser = false,
-  });
-
-  final String initials;
-  final Color color;
-  final String name;
-  final String note;
-  final int knots;
-  final String? tag;
-  final bool isUser;
-}
-
-/// Static competitor roster (and their fixed knot totals) used both to render
-/// the other rows and to rank the real user against them.
-abstract final class _Leaderboard {
-  static const List<_LeaderEntry> competitors = [
-    _LeaderEntry(
-      initials: 'LS',
-      color: AppColors.seafoam,
-      name: 'Bosun Liam S.',
-      note: '14-day steady swell streak',
-      knots: 850,
-      tag: 'Fleet Beacon',
-    ),
-    _LeaderEntry(
-      initials: 'DK',
-      color: AppColors.sand,
-      name: 'Chief Eng. Dave K.',
-      note: '9 sound-down cabin rests logged',
-      knots: 780,
-    ),
-    _LeaderEntry(
-      initials: 'ER',
-      color: AppColors.teal,
-      name: 'Deckhand Elena R.',
-      note: '10 tidal breath resets',
-      knots: 650,
-    ),
-    _LeaderEntry(
-      initials: 'AM',
-      color: AppColors.sand,
-      name: 'Cadet Aris M.',
-      note: 'First Voyage Star • 6 logs true',
-      knots: 590,
-    ),
-  ];
-
-  static List<int> get competitorKnots =>
-      [for (final c in competitors) c.knots];
+/// Derives display initials from a real account name — "Marcus Thorne" -> MT,
+/// a single-word name -> its first letter.
+String _initialsFor(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((p) => p.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+      .toUpperCase();
 }
 
 class _LeaderboardSection extends StatelessWidget {
-  const _LeaderboardSection({required this.summary});
+  const _LeaderboardSection({required this.entries, required this.loading});
 
-  final ContributionSummary summary;
+  /// Null while loading or if the last backend sync failed — never fake rows.
+  final List<LeaderboardEntry>? entries;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    // The top 4 competitors always hold rows 1-4 in fixed order; the real
-    // user is always appended as the 5th row, labeled with their true
-    // individual rank rather than their position in this list.
-    final you = _LeaderEntry(
-      initials: 'MT',
-      color: AppColors.teal,
-      name: 'Marcus Thorne (You)',
-      note: '${summary.seaLogsFiled} sea logs filed',
-      knots: summary.totalKnots,
-      isUser: true,
-    );
-    final entries = [..._Leaderboard.competitors, you];
-    final ranks = [
-      for (var i = 0; i < _Leaderboard.competitors.length; i++) i + 1,
-      currentFleetRank(summary.totalKnots),
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1095,13 +1078,10 @@ class _LeaderboardSection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Fleet Solidarity Log',
-                    style: AppTextStyles.titleMedium,
-                  ),
+                  Text('Leadership Board', style: AppTextStyles.titleMedium),
                   const SizedBox(height: 2),
                   Text(
-                    'Celebrating restorative actions & crew presence',
+                    'Ranked by real Fleet Knots across the crew',
                     style: AppTextStyles.caption,
                   ),
                 ],
@@ -1142,19 +1122,50 @@ class _LeaderboardSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        for (var i = 0; i < entries.length; i++) ...[
-          if (i > 0) const SizedBox(height: 10),
-          _LeaderRow(
-            rank: ranks[i],
-            initials: entries[i].initials,
-            color: entries[i].color,
-            name: entries[i].name,
-            note: entries[i].note,
-            knots: '${entries[i].knots}',
-            tag: entries[i].tag,
-            highlighted: entries[i].isUser,
-          ),
-        ],
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.seafoam,
+                ),
+              ),
+            ),
+          )
+        else if (entries == null || entries!.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.glassFillFaint,
+              borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+              border: Border.all(color: AppColors.glassBorderSoft),
+            ),
+            child: Text(
+              'Leadership Board is unavailable right now — check the '
+              'backend connection and reopen Crew.',
+              style: AppTextStyles.bodySmall,
+            ),
+          )
+        else
+          for (var i = 0; i < entries!.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            _LeaderRow(
+              rank: entries![i].rank,
+              initials: _initialsFor(entries![i].name),
+              color: entries![i].isMe ? AppColors.teal : AppColors.sand,
+              name: entries![i].isMe
+                  ? '${entries![i].name} (You)'
+                  : entries![i].name,
+              note: entries![i].fleetName,
+              knots: '${entries![i].totalPoints}',
+              highlighted: entries![i].isMe,
+            ),
+          ],
       ],
     );
   }
@@ -1168,7 +1179,6 @@ class _LeaderRow extends StatelessWidget {
     required this.name,
     required this.note,
     required this.knots,
-    this.tag,
     this.highlighted = false,
   });
 
@@ -1176,9 +1186,10 @@ class _LeaderRow extends StatelessWidget {
   final String initials;
   final Color color;
   final String name;
-  final String note;
+
+  /// Fleet name, if the account has one — null/empty shows no second line.
+  final String? note;
   final String knots;
-  final String? tag;
   final bool highlighted;
 
   @override
@@ -1217,42 +1228,21 @@ class _LeaderRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        style: AppTextStyles.bodyStrong.copyWith(
-                          color: highlighted ? AppColors.seafoam : null,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (tag != null) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.seafoamFaint,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          tag!,
-                          style: AppTextStyles.badge.copyWith(fontSize: 9),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
                 Text(
-                  note,
-                  style: AppTextStyles.caption,
+                  name,
+                  style: AppTextStyles.bodyStrong.copyWith(
+                    color: highlighted ? AppColors.seafoam : null,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (note != null && note!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    note!,
+                    style: AppTextStyles.caption,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),

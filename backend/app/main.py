@@ -9,6 +9,8 @@ cross-device wellness competitions):
     POST  /auth/logout                  -> delete the caller's session (204)
     GET   /auth/me                       -> the current user (Bearer-protected)
     PATCH /auth/me                       -> partial profile update (name/age/sex/fleet_name)
+    PUT   /me/points                     -> overwrite the caller's Fleet Knots total (Bearer-protected)
+    GET   /leaderboard                   -> top N accounts by points + the caller's own row (Bearer-protected)
 
 Content catalog (unrelated to accounts, open):
     GET   /health                       -> liveness probe
@@ -95,6 +97,22 @@ class UserOut(BaseModel):
 class AuthOut(BaseModel):
     token: str
     user: UserOut
+
+
+class PointsIn(BaseModel):
+    total_points: int = Field(..., ge=0)
+
+
+class LeaderboardEntryOut(BaseModel):
+    name: str
+    fleet_name: Optional[str] = None
+    total_points: int
+    rank: int
+    is_me: bool
+
+
+class LeaderboardOut(BaseModel):
+    entries: list[LeaderboardEntryOut]
 
 
 # --- Content catalog schemas ------------------------------------------------
@@ -301,6 +319,55 @@ def update_me(
     if updated is None:  # pragma: no cover - current_user guarantees existence
         raise HTTPException(status_code=404, detail="user not found")
     return database.public_user(updated)
+
+
+@app.put("/me/points")
+def update_my_points(
+    payload: PointsIn, user: dict = Depends(current_user)
+) -> dict:
+    """Overwrite the caller's Fleet Knots total with [payload.total_points].
+
+    The device's on-device ledger is the source of truth for *how* points
+    were earned; this always replaces the whole total (never a delta), so a
+    sync can never double-count or drift out of sync with the device.
+    """
+    updated = database.set_user_points(user["id"], payload.total_points)
+    if updated is None:  # pragma: no cover - current_user guarantees existence
+        raise HTTPException(status_code=404, detail="user not found")
+    return {"total_points": updated["total_points"]}
+
+
+@app.get("/leaderboard", response_model=LeaderboardOut)
+def read_leaderboard(
+    limit: int = 4, user: dict = Depends(current_user)
+) -> dict:
+    """Real multi-user ranking: the top [limit] accounts by points, plus the
+    caller's own row (with their true rank) appended if they didn't already
+    make the top [limit] — so the caller always sees where they stand, never
+    duplicated if they're already in the top slice.
+    """
+    top = database.leaderboard_top(limit)
+    entries = [
+        {
+            "name": row["name"],
+            "fleet_name": row["fleet_name"],
+            "total_points": row["total_points"],
+            "rank": i + 1,
+            "is_me": row["id"] == user["id"],
+        }
+        for i, row in enumerate(top)
+    ]
+    if not any(e["is_me"] for e in entries):
+        entries.append(
+            {
+                "name": user["name"],
+                "fleet_name": user["fleet_name"],
+                "total_points": user["total_points"],
+                "rank": database.user_rank(user["id"]),
+                "is_me": True,
+            }
+        )
+    return {"entries": entries}
 
 
 # ---------------------------------------------------------------------------

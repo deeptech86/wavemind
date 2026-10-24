@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../data/leaderboard_service.dart';
+import '../data/models/leaderboard_entry.dart';
 import '../data/models/voyage_status.dart';
 import '../data/wellness_repository.dart';
 import '../theme/app_colors.dart';
@@ -25,11 +27,18 @@ int daysRemainingInChallengeWeek([DateTime? now]) {
 /// Main app dashboard shown after onboarding — the "Helm" (Stitch
 /// "helm_dashboard" redesign).
 class HomeDashboardScreen extends StatefulWidget {
-  const HomeDashboardScreen({super.key, WellnessRepository? repository})
-    : _repository = repository;
+  const HomeDashboardScreen({
+    super.key,
+    WellnessRepository? repository,
+    LeaderboardService? leaderboardService,
+  }) : _repository = repository,
+       _leaderboardService = leaderboardService;
 
   /// Optional injection point for tests; defaults to the shared on-device repo.
   final WellnessRepository? _repository;
+
+  /// Optional injection point for tests.
+  final LeaderboardService? _leaderboardService;
 
   @override
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
@@ -38,8 +47,14 @@ class HomeDashboardScreen extends StatefulWidget {
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   late final WellnessRepository _repo =
       widget._repository ?? WellnessRepository();
+  late final LeaderboardService _leaderboardService =
+      widget._leaderboardService ?? LeaderboardService();
 
   ContributionSummary _summary = ContributionSummary.empty;
+
+  /// The sailor's real backend-ranked position. Null while loading or if the
+  /// sync failed — the banner shows a graceful placeholder, never a fake rank.
+  int? _rank;
 
   @override
   void initState() {
@@ -51,6 +66,25 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     final summary = await _repo.contributionSummary();
     if (!mounted) return;
     setState(() => _summary = summary);
+    await _loadRank(summary.totalKnots);
+  }
+
+  Future<void> _loadRank(int totalKnots) async {
+    List<LeaderboardEntry>? entries;
+    try {
+      entries = await _leaderboardService.sync(totalKnots);
+    } catch (_) {
+      entries = null;
+    }
+    if (!mounted) return;
+    int? rank;
+    for (final entry in entries ?? const <LeaderboardEntry>[]) {
+      if (entry.isMe) {
+        rank = entry.rank;
+        break;
+      }
+    }
+    setState(() => _rank = rank);
   }
 
   void _open(BuildContext context, Widget screen) {
@@ -85,7 +119,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     children: [
                       _LeaderboardScoreBanner(
                         totalKnots: _summary.totalKnots,
-                        rank: currentFleetRank(_summary.totalKnots),
+                        rank: _rank,
                         daysToGo: daysRemainingInChallengeWeek(),
                         onTap: () => _open(
                           context,
@@ -515,7 +549,10 @@ class _LeaderboardScoreBanner extends StatelessWidget {
   });
 
   final int totalKnots;
-  final int rank;
+
+  /// The sailor's real backend-ranked position. Null while loading or if the
+  /// leaderboard sync failed.
+  final int? rank;
 
   /// Days left in the current weekly challenge window (Monday–Sunday).
   final int daysToGo;
@@ -569,7 +606,10 @@ class _LeaderboardScoreBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Rank #$rank • $daysToGo ${daysToGo == 1 ? 'day' : 'days'} to go',
+                      rank != null
+                          ? 'Rank #$rank • $daysToGo '
+                              '${daysToGo == 1 ? 'day' : 'days'} to go'
+                          : '$daysToGo ${daysToGo == 1 ? 'day' : 'days'} to go',
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.seafoam,
                       ),
