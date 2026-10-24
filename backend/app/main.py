@@ -13,8 +13,9 @@ cross-device wellness competitions):
     GET   /leaderboard                   -> top N accounts by points + the caller's own row (Bearer-protected)
     PUT   /me/mood                       -> overwrite the caller's latest mood state (Bearer-protected)
     GET   /crew/mood-summary             -> anonymous % of crew currently "calm" (Bearer-protected)
-    PUT   /crew/message                  -> cast a new crew message, bumping older ones down (Bearer-protected)
-    GET   /crew/message                  -> the latest 3 crew messages, newest first (Bearer-protected)
+    PUT   /crew/message                  -> cast a new crew message, bumping older ones down (Bearer-protected; 403 if suspended)
+    GET   /crew/message                  -> the latest 3 crew messages + the caller's own suspension status (Bearer-protected)
+    POST  /crew/message/{id}/flag        -> flag a message; >5 distinct flaggers suspends its author 30 days (Bearer-protected)
 
 Content catalog (unrelated to accounts, open):
     GET   /health                       -> liveness probe
@@ -136,14 +137,25 @@ class CrewMessageIn(BaseModel):
 
 
 class CrewMessageOut(BaseModel):
+    id: int
     body: str
     author_name: str
     posted_at: str
+    # Whether the caller themself has already flagged this one — lets the
+    # app disable the flag button rather than offering a no-op retap.
+    flagged_by_me: bool = False
 
 
 class CrewMessagesOut(BaseModel):
     # Newest first, capped at database.CREW_MESSAGE_LIMIT (currently 3).
     messages: list[CrewMessageOut]
+    # Set only while the caller's own casting suspension is active.
+    my_suspended_until: Optional[str] = None
+
+
+class CrewMessageFlagOut(BaseModel):
+    flag_count: int
+    author_suspended: bool
 
 
 # --- Content catalog schemas ------------------------------------------------
@@ -422,18 +434,54 @@ def read_crew_mood_summary(user: dict = Depends(current_user)) -> dict:
 def cast_crew_message(
     payload: CrewMessageIn, user: dict = Depends(current_user)
 ) -> dict:
-    """Cast a new crew message, attributed to the caller's real account
-    name. Bumps every older message down a slot; only the latest
+    """Cast a new crew message, attributed to the caller's real account.
+    Bumps every older message down a slot; only the latest
     database.CREW_MESSAGE_LIMIT are kept — the rest just age out.
+
+    403s if the caller is currently suspended (their last cast was flagged
+    by more than database.FLAG_SUSPEND_THRESHOLD distinct accounts) — this
+    is enforced server-side regardless of what the client UI shows, since a
+    disabled button alone is trivially bypassed.
     """
-    return database.set_crew_message(payload.body.strip(), user["name"])
+    if database.is_user_suspended(user):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Casting is suspended until "
+                f"{user['suspended_until']} after crew flags."
+            ),
+        )
+    return database.set_crew_message(payload.body.strip(), user["name"], user["id"])
 
 
 @app.get("/crew/message", response_model=CrewMessagesOut)
 def read_crew_messages(user: dict = Depends(current_user)) -> dict:
-    """The latest crew messages, newest first — empty if no one has cast
-    one yet."""
-    return {"messages": database.get_crew_messages()}
+    """The latest crew messages, newest first (empty if no one has cast one
+    yet), each flagged with whether the caller already flagged it, plus the
+    caller's own suspension status so the app can disable casting."""
+    rows = database.get_crew_messages()
+    flagged = database.crew_messages_flagged_by([r["id"] for r in rows], user["id"])
+    return {
+        "messages": [{**r, "flagged_by_me": r["id"] in flagged} for r in rows],
+        "my_suspended_until": (
+            user["suspended_until"] if database.is_user_suspended(user) else None
+        ),
+    }
+
+
+@app.post("/crew/message/{message_id}/flag", response_model=CrewMessageFlagOut)
+def flag_crew_message(
+    message_id: int, user: dict = Depends(current_user)
+) -> dict:
+    """Flag a crew message. A second flag from the same caller on the same
+    message is a no-op (only distinct accounts count). Once a message
+    passes database.FLAG_SUSPEND_THRESHOLD distinct flaggers, its author is
+    suspended from casting for database.SUSPENSION_DAYS.
+    """
+    result = database.flag_crew_message(message_id, user["id"])
+    if result is None:
+        raise HTTPException(status_code=404, detail="message not found")
+    return result
 
 
 # ---------------------------------------------------------------------------

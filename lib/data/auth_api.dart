@@ -237,8 +237,9 @@ class AuthApi {
     }
   }
 
-  /// Casts [body] as the one shared crew message, replacing whatever was
-  /// cast last.
+  /// Casts [body] as a new crew message, bumping older ones down a slot.
+  /// Throws with [isAuthFailure] set if the account is currently suspended
+  /// from casting (403 — its last cast was flagged by too many accounts).
   Future<CrewMessage> postCrewMessage(String token, String body) async {
     final res = await _send(
       'PUT',
@@ -248,6 +249,12 @@ class AuthApi {
     );
     if (res.statusCode == 401) {
       throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode == 403) {
+      throw AuthApiException(
+        _detailOr(res, 'Casting is suspended for this account.'),
+        isAuthFailure: true,
+      );
     }
     if (res.statusCode == 422) {
       throw const AuthApiException(
@@ -266,8 +273,9 @@ class AuthApi {
   }
 
   /// The latest crew messages, newest first (empty if no one has cast one
-  /// yet) — capped server-side at 3.
-  Future<List<CrewMessage>> crewMessages(String token) async {
+  /// yet) — capped server-side at 3 — plus the caller's own casting
+  /// suspension status.
+  Future<CrewMessagesPage> crewMessages(String token) async {
     final res = await _send('GET', '/crew/message', token: token);
     if (res.statusCode == 401) {
       throw const AuthApiException('Session expired.', isAuthFailure: true);
@@ -276,11 +284,32 @@ class AuthApi {
       throw AuthApiException('Server error (${res.statusCode}).');
     }
     try {
-      final decoded = jsonDecode(res.body) as Map<String, Object?>;
-      final rows = (decoded['messages'] as List).cast<Map<String, Object?>>();
-      return rows.map(CrewMessage.fromJson).toList();
+      return CrewMessagesPage.fromJson(
+        jsonDecode(res.body) as Map<String, Object?>,
+      );
     } catch (_) {
       throw const AuthApiException('Received an unexpected response.');
+    }
+  }
+
+  /// Flags [messageId]. A second flag from the same account on the same
+  /// message is a harmless no-op server-side.
+  Future<void> flagCrewMessage(String token, int messageId) async {
+    final res = await _send(
+      'POST',
+      '/crew/message/$messageId/flag',
+      token: token,
+    );
+    if (res.statusCode == 401) {
+      throw const AuthApiException('Session expired.', isAuthFailure: true);
+    }
+    if (res.statusCode == 404) {
+      throw const AuthApiException(
+        'This message is no longer available to flag.',
+      );
+    }
+    if (res.statusCode != 200) {
+      throw AuthApiException('Server error (${res.statusCode}).');
     }
   }
 

@@ -96,6 +96,10 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
   List<CrewMessage>? _crewMessages;
   bool _crewMessageLoading = true;
 
+  /// Set only while the signed-in account's casting suspension is active
+  /// (their last cast was flagged by too many accounts).
+  DateTime? _mySuspendedUntil;
+
   @override
   void initState() {
     super.initState();
@@ -149,15 +153,16 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
   Future<void> _loadCrewMessage() async {
     if (!mounted) return;
     setState(() => _crewMessageLoading = true);
-    List<CrewMessage>? result;
+    CrewMessagesPage? page;
     try {
-      result = await _crewMessageService.fetchLatest();
+      page = await _crewMessageService.fetchLatest();
     } catch (_) {
-      result = null;
+      page = null;
     }
     if (!mounted) return;
     setState(() {
-      _crewMessages = result;
+      _crewMessages = page?.messages;
+      _mySuspendedUntil = page?.mySuspendedUntil;
       _crewMessageLoading = false;
     });
   }
@@ -197,6 +202,7 @@ class _CommunityConnectScreenState extends State<CommunityConnectScreen> {
                           crewMessages: _crewMessages,
                           crewMessageLoading: _crewMessageLoading,
                           crewMessageService: _crewMessageService,
+                          mySuspendedUntil: _mySuspendedUntil,
                           onMessagePosted: _loadCrewMessage,
                         )
                       else
@@ -323,6 +329,7 @@ class _AnchorPoolView extends StatelessWidget {
     required this.crewMessages,
     required this.crewMessageLoading,
     required this.crewMessageService,
+    required this.mySuspendedUntil,
     required this.onMessagePosted,
   });
 
@@ -331,6 +338,9 @@ class _AnchorPoolView extends StatelessWidget {
   final List<CrewMessage>? crewMessages;
   final bool crewMessageLoading;
   final CrewMessageService crewMessageService;
+
+  /// Set only while the signed-in account's casting suspension is active.
+  final DateTime? mySuspendedUntil;
   final Future<void> Function() onMessagePosted;
 
   @override
@@ -340,9 +350,18 @@ class _AnchorPoolView extends StatelessWidget {
       children: [
         _CrewMoodDashboard(summary: crewMood, loading: crewMoodLoading),
         const SizedBox(height: 20),
-        _EncourageBox(service: crewMessageService, onPosted: onMessagePosted),
+        _EncourageBox(
+          service: crewMessageService,
+          onPosted: onMessagePosted,
+          suspendedUntil: mySuspendedUntil,
+        ),
         const SizedBox(height: 20),
-        _GratitudeWall(messages: crewMessages, loading: crewMessageLoading),
+        _GratitudeWall(
+          messages: crewMessages,
+          loading: crewMessageLoading,
+          service: crewMessageService,
+          onFlagged: onMessagePosted,
+        ),
       ],
     );
   }
@@ -387,7 +406,9 @@ class _CrewMoodDashboard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: isCalm ? AppColors.seafoamFaint : AppColors.sandFaint,
+                    color: isCalm
+                        ? AppColors.seafoamFaint
+                        : AppColors.sandFaint,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -479,13 +500,38 @@ class _CrewMoodDashboard extends StatelessWidget {
 /// chat — there is no thread, just the one current float bottle everyone
 /// sees under the Gratitude Wall.
 class _EncourageBox extends StatefulWidget {
-  const _EncourageBox({required this.service, required this.onPosted});
+  const _EncourageBox({
+    required this.service,
+    required this.onPosted,
+    required this.suspendedUntil,
+  });
 
   final CrewMessageService service;
   final Future<void> Function() onPosted;
 
+  /// Set only while the signed-in account's casting suspension is active.
+  final DateTime? suspendedUntil;
+
   @override
   State<_EncourageBox> createState() => _EncourageBoxState();
+}
+
+String _formatSuspensionDate(DateTime d) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${months[d.month - 1]} ${d.day}, ${d.year}';
 }
 
 class _EncourageBoxState extends State<_EncourageBox> {
@@ -526,6 +572,9 @@ class _EncourageBoxState extends State<_EncourageBox> {
 
   @override
   Widget build(BuildContext context) {
+    final suspendedUntil = widget.suspendedUntil;
+    final isSuspended =
+        suspendedUntil != null && suspendedUntil.isAfter(DateTime.now());
     final canCast = _controller.text.trim().isNotEmpty && !_posting;
     return Container(
       width: double.infinity,
@@ -549,66 +598,77 @@ class _EncourageBoxState extends State<_EncourageBox> {
             style: AppTextStyles.cardTitleSmall,
           ),
           const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: AppColors.overlayDark,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TextField(
-              controller: _controller,
-              enabled: !_posting,
-              maxLength: 280,
-              maxLines: 3,
-              minLines: 1,
-              onChanged: (_) => setState(() {}),
+          if (isSuspended)
+            Text(
+              'Casting is paused until ${_formatSuspensionDate(suspendedUntil)} '
+              "— your last message was flagged by the crew. You'll be able "
+              'to cast again after that.',
               style: AppTextStyles.bodySmall.copyWith(
                 color: AppColors.tealTint,
               ),
-              cursorColor: AppColors.white,
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                counterStyle: AppTextStyles.caption.copyWith(
+            )
+          else ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppColors.overlayDark,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextField(
+                controller: _controller,
+                enabled: !_posting,
+                maxLength: 280,
+                maxLines: 3,
+                minLines: 1,
+                onChanged: (_) => setState(() {}),
+                style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.tealTint,
                 ),
-                hintText:
-                    'Type a supportive message to cast to the whole crew...',
-                hintStyle: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.tealTint,
+                cursorColor: AppColors.white,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  counterStyle: AppTextStyles.caption.copyWith(
+                    color: AppColors.tealTint,
+                  ),
+                  hintText:
+                      'Type a supportive message to cast to the whole crew...',
+                  hintStyle: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.tealTint,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Material(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
+            const SizedBox(height: 12),
+            Material(
+              color: AppColors.white,
               borderRadius: BorderRadius.circular(12),
-              onTap: canCast ? _cast : null,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                alignment: Alignment.center,
-                child: _posting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.teal,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: canCast ? _cast : null,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  alignment: Alignment.center,
+                  child: _posting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.teal,
+                          ),
+                        )
+                      : Text(
+                          'Cast to Fleet',
+                          style: AppTextStyles.buttonSmall.copyWith(
+                            color: canCast ? AppColors.teal : AppColors.muted,
+                          ),
                         ),
-                      )
-                    : Text(
-                        'Cast to Fleet',
-                        style: AppTextStyles.buttonSmall.copyWith(
-                          color: canCast ? AppColors.teal : AppColors.muted,
-                        ),
-                      ),
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -624,10 +684,38 @@ class _EncourageBoxState extends State<_EncourageBox> {
 /// fake note: while loading or if nothing has been cast yet, shows a plain
 /// fallback instead.
 class _GratitudeWall extends StatelessWidget {
-  const _GratitudeWall({required this.messages, required this.loading});
+  const _GratitudeWall({
+    required this.messages,
+    required this.loading,
+    required this.service,
+    required this.onFlagged,
+  });
 
   final List<CrewMessage>? messages;
   final bool loading;
+  final CrewMessageService service;
+
+  /// Called after a flag is successfully recorded, to refresh
+  /// [CrewMessage.flaggedByMe] (and pick up a newly-applied suspension).
+  final Future<void> Function() onFlagged;
+
+  Future<void> _flag(BuildContext context, CrewMessage message) async {
+    try {
+      await service.flag(message.id);
+      await onFlagged();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Message flagged.')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not flag this message. Please try again.'),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -670,15 +758,20 @@ class _GratitudeWall extends StatelessWidget {
           )
         else
           SizedBox(
-            height: 120,
+            height: 140,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: messages!.length,
               separatorBuilder: (_, _) => const SizedBox(width: 10),
-              itemBuilder: (context, i) => _GratitudeNote(
-                text: messages![i].body,
-                author: messages![i].authorName,
-              ),
+              itemBuilder: (context, i) {
+                final message = messages![i];
+                return _GratitudeNote(
+                  text: message.body,
+                  author: message.authorName,
+                  flagged: message.flaggedByMe,
+                  onFlag: () => _flag(context, message),
+                );
+              },
             ),
           ),
       ],
@@ -687,10 +780,19 @@ class _GratitudeWall extends StatelessWidget {
 }
 
 class _GratitudeNote extends StatelessWidget {
-  const _GratitudeNote({required this.text, required this.author});
+  const _GratitudeNote({
+    required this.text,
+    required this.author,
+    required this.flagged,
+    required this.onFlag,
+  });
 
   final String text;
   final String author;
+
+  /// Whether the signed-in account already flagged this message.
+  final bool flagged;
+  final VoidCallback onFlag;
 
   @override
   Widget build(BuildContext context) {
@@ -717,9 +819,34 @@ class _GratitudeNote extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            author,
-            style: AppTextStyles.badge.copyWith(fontWeight: FontWeight.w400),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  author,
+                  style: AppTextStyles.badge.copyWith(
+                    fontWeight: FontWeight.w400,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Semantics(
+                button: true,
+                label: flagged ? 'Already flagged' : 'Flag this message',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: flagged ? null : onFlag,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      flagged ? Icons.flag : Icons.flag_outlined,
+                      size: 16,
+                      color: flagged ? AppColors.stormRed : AppColors.muted,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -775,10 +902,7 @@ class _FleetSpiritView extends StatelessWidget {
           onSynced: onSynced,
         ),
         const SizedBox(height: 24),
-        _LeaderboardSection(
-          entries: leaderboard,
-          loading: leaderboardLoading,
-        ),
+        _LeaderboardSection(entries: leaderboard, loading: leaderboardLoading),
         const SizedBox(height: 20),
         const _KnotsInfoDeck(),
       ],
@@ -930,7 +1054,9 @@ class _VoyageMilestoneCardState extends State<_VoyageMilestoneCard> {
               value: percentComplete,
               minHeight: 8,
               backgroundColor: AppColors.deepNavy,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.seafoam),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.seafoam,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -1428,9 +1554,7 @@ class _LeaderRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: highlighted ? AppColors.seafoamFaint : AppColors.cardSurface,
         borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-        border: highlighted
-            ? Border.all(color: AppColors.seafoamBorder)
-            : null,
+        border: highlighted ? Border.all(color: AppColors.seafoamBorder) : null,
       ),
       child: Row(
         children: [

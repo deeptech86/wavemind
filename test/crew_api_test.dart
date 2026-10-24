@@ -105,36 +105,66 @@ void main() {
       expect(message.authorName, 'Marcus Thorne');
     });
 
-    test('crewMessages parses the list, newest first', () async {
+    test('crewMessages parses the list, newest first, plus suspension', () async {
       final body = jsonEncode({
         'messages': [
           {
+            'id': 2,
             'body': 'Second cast.',
             'author_name': 'Bob',
             'posted_at': '2026-01-02T00:00:00+00:00',
+            'flagged_by_me': true,
           },
           {
+            'id': 1,
             'body': 'First cast.',
             'author_name': 'Alice',
             'posted_at': '2026-01-01T00:00:00+00:00',
+            'flagged_by_me': false,
           },
         ],
+        'my_suspended_until': '2026-02-01T00:00:00+00:00',
       });
       final client = _StubClient(http.Response(body, 200));
       final api = AuthApi(client: client);
 
-      final messages = await api.crewMessages('tok');
+      final page = await api.crewMessages('tok');
 
-      expect(messages, hasLength(2));
-      expect(messages[0].body, 'Second cast.');
-      expect(messages[1].body, 'First cast.');
+      expect(page.messages, hasLength(2));
+      expect(page.messages[0].body, 'Second cast.');
+      expect(page.messages[0].id, 2);
+      expect(page.messages[0].flaggedByMe, true);
+      expect(page.messages[1].body, 'First cast.');
+      expect(page.mySuspendedUntil, DateTime.parse('2026-02-01T00:00:00+00:00'));
     });
 
     test('crewMessages returns an empty list when none have been cast', () async {
       final client = _StubClient(http.Response(jsonEncode({'messages': []}), 200));
       final api = AuthApi(client: client);
 
-      expect(await api.crewMessages('tok'), isEmpty);
+      expect((await api.crewMessages('tok')).messages, isEmpty);
+    });
+  });
+
+  group('AuthApi.flagCrewMessage', () {
+    test('POSTs to the flag endpoint', () async {
+      final client = _StubClient(http.Response(jsonEncode({'flag_count': 1, 'author_suspended': false}), 200));
+      final api = AuthApi(client: client);
+
+      await api.flagCrewMessage('tok', 42);
+
+      expect(client.lastRequest!.method, 'POST');
+      expect(client.lastRequest!.url.path, '/crew/message/42/flag');
+    });
+
+    test('throws on a 404 (message aged out)', () async {
+      final client = _StubClient(http.Response('{}', 404));
+      final api = AuthApi(client: client);
+
+      expect(
+        () => api.flagCrewMessage('tok', 999),
+        throwsA(isA<AuthApiException>()),
+      );
     });
   });
 
@@ -196,13 +226,15 @@ void main() {
       expect(await service.fetchLatest(), isNull);
     });
 
-    test('fetchLatest returns the real list when a session exists', () async {
+    test('fetchLatest returns the real page when a session exists', () async {
       final body = jsonEncode({
         'messages': [
           {
+            'id': 1,
             'body': 'Fair winds.',
             'author_name': 'Marcus Thorne',
             'posted_at': '2026-01-01T00:00:00+00:00',
+            'flagged_by_me': false,
           },
         ],
       });
@@ -211,10 +243,34 @@ void main() {
         tokenStorage: _FixedTokenStorage('tok'),
       );
 
-      final messages = await service.fetchLatest();
+      final page = await service.fetchLatest();
 
-      expect(messages, hasLength(1));
-      expect(messages!.single.authorName, 'Marcus Thorne');
+      expect(page!.messages, hasLength(1));
+      expect(page.messages.single.authorName, 'Marcus Thorne');
+      expect(page.mySuspendedUntil, isNull);
+    });
+
+    test('flag throws when there is no stored session', () async {
+      final service = CrewMessageService(
+        api: AuthApi(client: _StubClient(http.Response('{}', 200))),
+        tokenStorage: _FixedTokenStorage(null),
+      );
+
+      expect(() => service.flag(1), throwsA(isA<AuthApiException>()));
+    });
+
+    test('flag calls through to the API when a session exists', () async {
+      final client = _StubClient(
+        http.Response(jsonEncode({'flag_count': 1, 'author_suspended': false}), 200),
+      );
+      final service = CrewMessageService(
+        api: AuthApi(client: client),
+        tokenStorage: _FixedTokenStorage('tok'),
+      );
+
+      await service.flag(7);
+
+      expect(client.lastRequest!.url.path, '/crew/message/7/flag');
     });
 
     test('cast throws when there is no stored session', () async {

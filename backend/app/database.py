@@ -72,6 +72,7 @@ def init_db() -> None:
                 total_points  INTEGER NOT NULL DEFAULT 0,
                 latest_mood_state TEXT,
                 latest_mood_at    TEXT,
+                suspended_until   TEXT,
                 created_at    TEXT NOT NULL,
                 updated_at    TEXT NOT NULL
             )
@@ -83,6 +84,7 @@ def init_db() -> None:
             "ALTER TABLE user ADD COLUMN total_points INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE user ADD COLUMN latest_mood_state TEXT",
             "ALTER TABLE user ADD COLUMN latest_mood_at TEXT",
+            "ALTER TABLE user ADD COLUMN suspended_until TEXT",
         ):
             try:
                 conn.execute(ddl)
@@ -156,7 +158,8 @@ def init_db() -> None:
         # The shared "cast a float bottle" crew messages — an append-only
         # log pruned to the latest CREW_MESSAGE_LIMIT rows on every cast
         # (see set_crew_message), newest first. Attributed to the real
-        # account name at cast time.
+        # account at cast time (author_id drives flag-triggered suspension;
+        # author_name is just the display string).
         old_schema = conn.execute(
             "SELECT sql FROM sqlite_master "
             "WHERE type = 'table' AND name = 'crew_message'"
@@ -172,6 +175,7 @@ def init_db() -> None:
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     body        TEXT NOT NULL,
                     author_name TEXT NOT NULL DEFAULT '',
+                    author_id   INTEGER,
                     posted_at   TEXT NOT NULL
                 )
                 """
@@ -188,10 +192,30 @@ def init_db() -> None:
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     body        TEXT NOT NULL,
                     author_name TEXT NOT NULL DEFAULT '',
+                    author_id   INTEGER,
                     posted_at   TEXT NOT NULL
                 )
                 """
             )
+            # A dev DB may already have the multi-row shape from before
+            # author_id existed.
+            try:
+                conn.execute("ALTER TABLE crew_message ADD COLUMN author_id INTEGER")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+        # One row per (message, distinct flagger) — the primary key is what
+        # makes "different users" enforcement free: a second flag from the
+        # same user on the same message is just ignored.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crew_message_flag (
+                message_id INTEGER NOT NULL,
+                user_id    INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (message_id, user_id)
+            )
+            """
+        )
         conn.commit()
 
 
@@ -413,7 +437,7 @@ def crew_mood_summary() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Crew message — the single "cast a float bottle" shared note
+# Crew message — the shared "cast a float bottle" notes, plus moderation
 # ---------------------------------------------------------------------------
 
 
@@ -421,18 +445,24 @@ def crew_mood_summary() -> dict:
 # bumps everything else down a slot, and the oldest falls off past this.
 CREW_MESSAGE_LIMIT = 3
 
+# More than this many *distinct* accounts flagging the same message suspends
+# its author from casting for SUSPENSION_DAYS. "More than 5" == 6th flag.
+FLAG_SUSPEND_THRESHOLD = 5
+SUSPENSION_DAYS = 30
 
-def set_crew_message(body: str, author_name: str) -> dict:
-    """Append a newly cast crew message, attributed to [author_name], then
-    prune down to the latest [CREW_MESSAGE_LIMIT] — the rest just age out,
-    there is no separate delete step."""
+
+def set_crew_message(body: str, author_name: str, author_id: int) -> dict:
+    """Append a newly cast crew message, then prune down to the latest
+    [CREW_MESSAGE_LIMIT] (and drop flags on whatever just aged out) — the
+    rest just age out, there is no separate delete step."""
     now = _utc_now_iso()
     with _connect() as conn:
-        conn.execute(
-            "INSERT INTO crew_message (body, author_name, posted_at) "
-            "VALUES (?, ?, ?)",
-            (body, author_name, now),
+        cursor = conn.execute(
+            "INSERT INTO crew_message (body, author_name, author_id, posted_at) "
+            "VALUES (?, ?, ?, ?)",
+            (body, author_name, author_id, now),
         )
+        new_id = cursor.lastrowid
         conn.execute(
             """
             DELETE FROM crew_message WHERE id NOT IN (
@@ -441,8 +471,12 @@ def set_crew_message(body: str, author_name: str) -> dict:
             """,
             (CREW_MESSAGE_LIMIT,),
         )
+        conn.execute(
+            "DELETE FROM crew_message_flag WHERE message_id NOT IN "
+            "(SELECT id FROM crew_message)"
+        )
         conn.commit()
-    return {"body": body, "author_name": author_name, "posted_at": now}
+    return {"id": new_id, "body": body, "author_name": author_name, "posted_at": now}
 
 
 def get_crew_messages(limit: int = CREW_MESSAGE_LIMIT) -> list[dict]:
@@ -450,18 +484,87 @@ def get_crew_messages(limit: int = CREW_MESSAGE_LIMIT) -> list[dict]:
     cast one yet."""
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT body, author_name, posted_at FROM crew_message "
+            "SELECT id, body, author_name, posted_at FROM crew_message "
             "ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
         return [
             {
+                "id": r["id"],
                 "body": r["body"],
                 "author_name": r["author_name"],
                 "posted_at": r["posted_at"],
             }
             for r in rows
         ]
+
+
+def crew_messages_flagged_by(message_ids: list[int], user_id: int) -> set[int]:
+    """Which of [message_ids] the caller has already flagged — lets the UI
+    disable the flag button on ones they've already flagged."""
+    if not message_ids:
+        return set()
+    placeholders = ",".join("?" for _ in message_ids)
+    with _connect() as conn:
+        rows = conn.execute(
+            f"SELECT message_id FROM crew_message_flag "
+            f"WHERE user_id = ? AND message_id IN ({placeholders})",
+            (user_id, *message_ids),
+        ).fetchall()
+        return {r["message_id"] for r in rows}
+
+
+def is_user_suspended(user_row: dict) -> bool:
+    """Whether [user_row]'s casting suspension is currently in effect."""
+    until = user_row.get("suspended_until")
+    if not until:
+        return False
+    try:
+        return datetime.fromisoformat(until) > datetime.now(timezone.utc)
+    except ValueError:
+        return False
+
+
+def flag_crew_message(message_id: int, user_id: int) -> Optional[dict]:
+    """Record [user_id]'s flag on [message_id] — a no-op if they already
+    flagged it (the composite primary key dedupes, giving "distinct users"
+    semantics for free). Once a message has been flagged by more than
+    [FLAG_SUSPEND_THRESHOLD] distinct accounts, its author is suspended
+    from casting for [SUSPENSION_DAYS] — applied once, not reset by every
+    further flag past the threshold. Returns ``None`` if the message
+    doesn't exist (e.g. it already aged out past the 3-message cap).
+    """
+    with _connect() as conn:
+        msg = conn.execute(
+            "SELECT id, author_id FROM crew_message WHERE id = ?", (message_id,)
+        ).fetchone()
+        if msg is None:
+            return None
+        conn.execute(
+            "INSERT OR IGNORE INTO crew_message_flag "
+            "(message_id, user_id, created_at) VALUES (?, ?, ?)",
+            (message_id, user_id, _utc_now_iso()),
+        )
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM crew_message_flag WHERE message_id = ?",
+            (message_id,),
+        ).fetchone()["n"]
+        author_id = msg["author_id"]
+        suspended = count > FLAG_SUSPEND_THRESHOLD and author_id is not None
+        if suspended:
+            author = conn.execute(
+                "SELECT suspended_until FROM user WHERE id = ?", (author_id,)
+            ).fetchone()
+            if author is not None and not is_user_suspended(dict(author)):
+                until = (
+                    datetime.now(timezone.utc) + timedelta(days=SUSPENSION_DAYS)
+                ).isoformat()
+                conn.execute(
+                    "UPDATE user SET suspended_until = ? WHERE id = ?",
+                    (until, author_id),
+                )
+        conn.commit()
+    return {"flag_count": count, "author_suspended": suspended}
 
 
 # ---------------------------------------------------------------------------
