@@ -725,25 +725,36 @@ class _ContributionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              _KnotBadge(
-                icon: Icons.verified_outlined,
-                label: 'Steady Helm (${summary.breathStreakDays}d Streak)',
-                color: AppColors.seafoam,
+              Expanded(
+                child: _KnotBadge(
+                  icon: Icons.verified_outlined,
+                  label: 'Steady Helm (${summary.breathStreakDays}d Streak)',
+                  color: AppColors.seafoam,
+                ),
               ),
-              _KnotBadge(
-                icon: Icons.menu_book_outlined,
-                label: '${summary.seaLogsFiled} Sea Logs Filed',
-                color: AppColors.sand,
+              const SizedBox(width: 8),
+              Expanded(
+                child: _KnotBadge(
+                  icon: Icons.military_tech,
+                  label: 'Rank #$rank',
+                  color: AppColors.cream,
+                ),
               ),
-              _KnotBadge(
-                icon: Icons.military_tech,
-                label: 'Rank #$rank',
-                color: AppColors.cream,
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _KnotBadge(
+                  icon: Icons.menu_book_outlined,
+                  label: '${summary.seaLogsFiled} Sea Logs Filed',
+                  color: AppColors.sand,
+                ),
               ),
+              const SizedBox(width: 8),
               _HealthSyncButton(
                 repository: repository,
                 healthService: healthService,
