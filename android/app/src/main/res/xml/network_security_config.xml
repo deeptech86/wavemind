@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release builds trust only system CAs — Android's normal, strict default.
+
+  Debug builds additionally trust user-installed CAs, via <debug-overrides>.
+  Android automatically applies that block only when the APK is debuggable
+  (android:debuggable="true") and strips it from release builds — no
+  separate per-variant resource file needed. This lets the app validate the
+  TideWell dev backend's mkcert certificate (see tool/gen_dev_cert.sh) once
+  that cert's root CA is installed as a user certificate on the device —
+  real, OS-trusted HTTPS for local dev, not a cleartext-traffic exception.
+-->
+<network-security-config>
+    <base-config>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

@@ -5,7 +5,7 @@ Two concerns, same small stdlib-sqlite3 FastAPI service:
 Accounts (real multi-user login/signup, the foundation for future
 cross-device wellness competitions):
     POST  /auth/signup                  -> create account + session, returns {token, user}
-    POST  /auth/login                   -> verify credentials + session, returns {token, user}
+    POST  /auth/login                   -> verify credentials + session, returns {token, user} (rate-limited per IP)
     POST  /auth/logout                  -> delete the caller's session (204)
     GET   /auth/me                       -> the current user (Bearer-protected)
     PATCH /auth/me                       -> partial profile update (name/age/sex/fleet_name)
@@ -17,15 +17,22 @@ cross-device wellness competitions):
     GET   /crew/message                  -> the latest 3 crew messages + the caller's own suspension status (Bearer-protected)
     POST  /crew/message/{id}/flag        -> flag a message; >5 distinct flaggers suspends its author 30 days (Bearer-protected)
 
-Content catalog (unrelated to accounts, open):
+Content catalog (unrelated to accounts; reads are open, writes require login):
     GET   /health                       -> liveness probe
-    GET   /content/catalog              -> all currently-active content
-    POST  /content/stories              -> upsert a story (create / replace)
-    PATCH /content/stories/{id}         -> partial update (e.g. toggle active)
-    POST  /content/sounds               -> upsert a sound
-    PATCH /content/sounds/{id}          -> partial update
-    POST  /content/featured-games       -> register a game's rotation eligibility
-    PATCH /content/featured-games/{key} -> toggle a game in/out of the rotation pool
+    GET   /content/catalog              -> all currently-active content (open — no account data)
+    POST  /content/stories              -> upsert a story (create / replace) (Bearer-protected)
+    PATCH /content/stories/{id}         -> partial update (e.g. toggle active) (Bearer-protected)
+    POST  /content/sounds               -> upsert a sound (Bearer-protected)
+    PATCH /content/sounds/{id}          -> partial update (Bearer-protected)
+    POST  /content/featured-games       -> register a game's rotation eligibility (Bearer-protected)
+    PATCH /content/featured-games/{key} -> toggle a game in/out of the rotation pool (Bearer-protected)
+
+    There is no separate "admin" role in this app — any signed-in account can
+    write the shared content catalog, same trust level as the rest of the
+    Bearer-protected endpoints above. That's a deliberate minimal fix for a
+    prior "fully open, no auth at all" gap, not a claim that any logged-in
+    sailor *should* be curating the global story/sound/game catalog — a real
+    admin-role split is a bigger feature for later if this ever needs it.
 
 Media files are served statically under ``/media`` from ``backend/media/``.
 
@@ -44,14 +51,23 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
 from . import auth, database, rotation, seed
+from .rate_limit import RateLimiter
 
 app = FastAPI(title="TideWell Accounts & Content Service", version="3.0.0")
+
+# Throttles /auth/login per client IP — 10 attempts per 5 minutes. Protects
+# against online password-guessing; deliberately scoped by IP rather than by
+# email so a single login endpoint can't be turned into a tool for locking a
+# *specific* legitimate account out (the classic account-lockout-as-DoS
+# tradeoff). A successful login clears the caller's count (see the handler),
+# so a few mistyped passwords never penalize the real owner.
+_login_limiter = RateLimiter(max_hits=10, window_seconds=5 * 60)
 
 # The Flutter client calls this from an emulator / device over the LAN, so keep
 # CORS permissive — there are no credentials or secrets served here.
@@ -312,9 +328,19 @@ def signup(payload: SignupIn) -> dict:
 
 
 @app.post("/auth/login", response_model=AuthOut)
-def login(payload: LoginIn) -> dict:
+def login(payload: LoginIn, request: Request) -> dict:
     """Verify credentials and open a new session. Returns a generic 401 on any
-    failure so it never leaks whether the email or the password was wrong."""
+    failure so it never leaks whether the email or the password was wrong.
+
+    Rate-limited per client IP (see ``_login_limiter``) — 429 once exceeded —
+    so this can't be used for unlimited online password-guessing.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    if not _login_limiter.allow(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again in a few minutes.",
+        )
     email = str(payload.email).lower()
     user = database.get_user_by_email(email)
     invalid = HTTPException(status_code=401, detail="Invalid email or password.")
@@ -324,6 +350,7 @@ def login(payload: LoginIn) -> dict:
         payload.password, user["password_salt"], user["password_hash"]
     ):
         raise invalid
+    _login_limiter.reset(client_ip)
     return _issue_session(user)
 
 
@@ -517,14 +544,18 @@ def read_catalog() -> dict:
 
 
 @app.post("/content/stories")
-def create_story(payload: StoryIn) -> dict:
+def create_story(
+    payload: StoryIn, user: dict = Depends(current_user)
+) -> dict:
     data = payload.model_dump()
     story_id = data.pop("id")
     return _with_media_url(database.upsert_story(story_id, data))
 
 
 @app.patch("/content/stories/{story_id}")
-def update_story(story_id: str, payload: StoryPatch) -> dict:
+def update_story(
+    story_id: str, payload: StoryPatch, user: dict = Depends(current_user)
+) -> dict:
     result = database.patch_story(
         story_id, payload.model_dump(exclude_unset=True)
     )
@@ -534,14 +565,18 @@ def update_story(story_id: str, payload: StoryPatch) -> dict:
 
 
 @app.post("/content/sounds")
-def create_sound(payload: SoundIn) -> dict:
+def create_sound(
+    payload: SoundIn, user: dict = Depends(current_user)
+) -> dict:
     data = payload.model_dump()
     sound_id = data.pop("id")
     return _with_media_url(database.upsert_sound(sound_id, data))
 
 
 @app.patch("/content/sounds/{sound_id}")
-def update_sound(sound_id: str, payload: SoundPatch) -> dict:
+def update_sound(
+    sound_id: str, payload: SoundPatch, user: dict = Depends(current_user)
+) -> dict:
     result = database.patch_sound(
         sound_id, payload.model_dump(exclude_unset=True)
     )
@@ -551,14 +586,20 @@ def update_sound(sound_id: str, payload: SoundPatch) -> dict:
 
 
 @app.post("/content/featured-games")
-def create_featured_game(payload: FeaturedGameIn) -> dict:
+def create_featured_game(
+    payload: FeaturedGameIn, user: dict = Depends(current_user)
+) -> dict:
     data = payload.model_dump()
     game_key = data.pop("game_key")
     return database.upsert_featured_game(game_key, data)
 
 
 @app.patch("/content/featured-games/{game_key}")
-def update_featured_game(game_key: str, payload: FeaturedGamePatch) -> dict:
+def update_featured_game(
+    game_key: str,
+    payload: FeaturedGamePatch,
+    user: dict = Depends(current_user),
+) -> dict:
     result = database.patch_featured_game(
         game_key, payload.model_dump(exclude_unset=True)
     )

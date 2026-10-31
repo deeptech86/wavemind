@@ -202,8 +202,16 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run (port 8010 chosen to avoid colliding with other local services):
-uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload
+# One-time (and again whenever this Mac's LAN IP changes): generate a
+# locally-trusted TLS cert via mkcert. See tool/gen_dev_cert.sh for what it
+# covers and how to trust it on a real test device.
+../tool/gen_dev_cert.sh
+
+# Run over HTTPS (port 8010 chosen to avoid colliding with other local
+# services). The server only ever serves TLS — there is no plaintext-HTTP
+# mode — so login/session traffic is never sent in the clear, even on a LAN:
+uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload \
+  --ssl-certfile certs/dev-cert.pem --ssl-keyfile certs/dev-key.pem
 ```
 
 The SQLite file is created automatically at `backend/tidewell.db` on first run
@@ -212,46 +220,60 @@ The SQLite file is created automatically at `backend/tidewell.db` on first run
 ## Quick verification
 
 ```bash
-curl http://localhost:8010/health
+curl https://localhost:8010/health
 
 # Accounts: signup -> capture the token -> use it on protected endpoints
-TOKEN=$(curl -s -X POST http://localhost:8010/auth/signup \
+TOKEN=$(curl -s -X POST https://localhost:8010/auth/signup \
   -H 'Content-Type: application/json' \
   -d '{"name":"Marcus Thorne","email":"marcus@example.com","password":"deepsea123","age":34,"sex":"male","fleet_name":"Northern Fleet"}' \
   | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
 
-curl -X POST http://localhost:8010/auth/signup \
+curl -X POST https://localhost:8010/auth/signup \
   -H 'Content-Type: application/json' \
   -d '{"name":"X","email":"marcus@example.com","password":"another12","age":9,"sex":"x"}'  # -> 409 duplicate
-curl -X POST http://localhost:8010/auth/login \
+curl -X POST https://localhost:8010/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"marcus@example.com","password":"wrongpass"}'                                 # -> 401 generic
-curl http://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN"                         # -> the user
-curl -X PATCH http://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN" \
+curl https://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN"                         # -> the user
+curl -X PATCH https://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{"name":"Captain Marcus","age":35}'                # -> updated user
-curl -X POST http://localhost:8010/auth/logout -H "Authorization: Bearer $TOKEN"             # -> 204
-curl http://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN"                         # -> 401 (session gone)
+curl -X POST https://localhost:8010/auth/logout -H "Authorization: Bearer $TOKEN"             # -> 204
+curl https://localhost:8010/auth/me -H "Authorization: Bearer $TOKEN"                         # -> 401 (session gone)
 
-# Content catalog
-curl http://localhost:8010/content/catalog               # -> active stories/sounds/games
-curl -I http://localhost:8010/media/stories/lighthouse.m4a   # -> 200, audio/mp4
+# Content catalog: reads are open, writes require a Bearer token (any signed-in
+# account — there is no separate admin role in this app)
+curl https://localhost:8010/content/catalog               # -> active stories/sounds/games
+curl -I https://localhost:8010/media/stories/lighthouse.m4a   # -> 200, audio/mp4
 
 # Rotate content: deactivate a story and watch it drop out of the catalog
-curl -X PATCH http://localhost:8010/content/stories/st_elmos_light \
-  -H 'Content-Type: application/json' -d '{"active": false}'
-curl http://localhost:8010/content/catalog               # -> st_elmos_light no longer listed
+curl -X PATCH https://localhost:8010/content/stories/st_elmos_light \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"active": false}'
+curl https://localhost:8010/content/catalog               # -> st_elmos_light no longer listed
 
 # Add (or remove) a game from the weekly rotation pool — which 2 eligible
 # games are actually featured this week is computed automatically, not set here
-curl -X PATCH http://localhost:8010/content/featured-games/fog_signal_echo \
-  -H 'Content-Type: application/json' -d '{"active": true}'
+curl -X PATCH https://localhost:8010/content/featured-games/fog_signal_echo \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"active": true}'
 ```
 
 ## How the Flutter app reaches it
 
-The app's `lib/core/app_config.dart` points at this service:
+The app's `lib/core/app_config.dart` points at this service, always over HTTPS:
 
-- Android emulator: `http://10.0.2.2:8010`
-- iOS simulator / desktop: `http://localhost:8010`
+- Android emulator: `https://10.0.2.2:8010`
+- iOS simulator / desktop: `https://localhost:8010`
 - Override for a physical device / staging:
-  `flutter run --dart-define=API_BASE_URL=http://192.168.x.x:8010`
+  `flutter run --dart-define=API_BASE_URL=https://192.168.x.x:8010`
+
+A **real device** additionally needs the mkcert root CA installed and trusted
+(`tool/gen_dev_cert.sh` prints exact steps per platform) — without that, the
+device correctly refuses the connection as an untrusted certificate. The iOS
+Simulator needs no extra step (it shares this Mac's trust store). The
+**Android emulator** does need the CA installed too, same as a real Android
+device (Settings > Security > Encryption & credentials > Install a
+certificate), *or* push it straight into the emulator's system trust store
+with root (works on a Google APIs, non-Play-Store emulator image):
+`adb root && adb remount` then push `rootCA.pem` into
+`/system/etc/security/cacerts/` under its subject-hash filename and reboot.

@@ -4,6 +4,11 @@
 *.pyc
 *.swp
 .DS_Store
+
+# Local dev TLS cert/key (mkcert) — machine-specific (bound to this Mac's
+# LAN IP) and a private key must never be committed. Regenerate with
+# tool/gen_dev_cert.sh.
+backend/certs/
 .atom/
 .build/
 .buildlog/
