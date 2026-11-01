@@ -17,7 +17,7 @@ class AuthTokenStorage {
 
   final FlutterSecureStorage _storage;
 
-  static const String _tokenKey = 'tidewell.auth.session_token';
+  static const String _tokenKey = 'wavemind.auth.session_token';
 
   Future<String?> read() => _storage.read(key: _tokenKey);
 

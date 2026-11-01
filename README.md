@@ -1,4 +1,4 @@
-# tidewell_app
+# wavemind_app
 
 A new Flutter project.
 

@@ -1,4 +1,4 @@
-"""Password hashing + session-token helpers for the TideWell accounts system.
+"""Password hashing + session-token helpers for the Wavemind accounts system.
 
 Deliberately stdlib-only (``hashlib`` / ``hmac`` / ``secrets``), consistent with
 this backend's "small, no-extra-dependencies" style — there is no ``bcrypt`` /

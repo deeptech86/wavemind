@@ -3,32 +3,32 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tidewell_app/data/auth_api.dart';
-import 'package:tidewell_app/data/auth_token_storage.dart';
-import 'package:tidewell_app/data/crew_message_service.dart';
-import 'package:tidewell_app/data/crew_mood_service.dart';
-import 'package:tidewell_app/data/leaderboard_service.dart';
-import 'package:tidewell_app/data/models/account.dart';
-import 'package:tidewell_app/data/profile_photo_service.dart';
-import 'package:tidewell_app/screens/auth_gate.dart';
-import 'package:tidewell_app/screens/home_dashboard_screen.dart';
-import 'package:tidewell_app/screens/login_screen.dart';
-import 'package:tidewell_app/screens/profile_screen.dart';
-import 'package:tidewell_app/screens/signup_screen.dart';
-import 'package:tidewell_app/screens/welcome_screen.dart';
-import 'package:tidewell_app/screens/cabin_dominoes_screen.dart';
-import 'package:tidewell_app/screens/community_connect_screen.dart';
-import 'package:tidewell_app/screens/fog_signal_echo_screen.dart';
-import 'package:tidewell_app/screens/guided_breathing_screen.dart';
-import 'package:tidewell_app/screens/haven_screen.dart';
-import 'package:tidewell_app/screens/journal_entry_screen.dart';
-import 'package:tidewell_app/screens/knot_master_screen.dart';
-import 'package:tidewell_app/screens/mindful_game_screen.dart';
-import 'package:tidewell_app/screens/mood_check_in_screen.dart';
-import 'package:tidewell_app/screens/off_watch_games_screen.dart';
-import 'package:tidewell_app/screens/sextant_horizon_screen.dart';
-import 'package:tidewell_app/screens/story_playback_screen.dart';
-import 'package:tidewell_app/screens/weekly_insights_screen.dart';
+import 'package:wavemind_app/data/auth_api.dart';
+import 'package:wavemind_app/data/auth_token_storage.dart';
+import 'package:wavemind_app/data/crew_message_service.dart';
+import 'package:wavemind_app/data/crew_mood_service.dart';
+import 'package:wavemind_app/data/leaderboard_service.dart';
+import 'package:wavemind_app/data/models/account.dart';
+import 'package:wavemind_app/data/profile_photo_service.dart';
+import 'package:wavemind_app/screens/auth_gate.dart';
+import 'package:wavemind_app/screens/home_dashboard_screen.dart';
+import 'package:wavemind_app/screens/login_screen.dart';
+import 'package:wavemind_app/screens/profile_screen.dart';
+import 'package:wavemind_app/screens/signup_screen.dart';
+import 'package:wavemind_app/screens/welcome_screen.dart';
+import 'package:wavemind_app/screens/cabin_dominoes_screen.dart';
+import 'package:wavemind_app/screens/community_connect_screen.dart';
+import 'package:wavemind_app/screens/fog_signal_echo_screen.dart';
+import 'package:wavemind_app/screens/guided_breathing_screen.dart';
+import 'package:wavemind_app/screens/haven_screen.dart';
+import 'package:wavemind_app/screens/journal_entry_screen.dart';
+import 'package:wavemind_app/screens/knot_master_screen.dart';
+import 'package:wavemind_app/screens/mindful_game_screen.dart';
+import 'package:wavemind_app/screens/mood_check_in_screen.dart';
+import 'package:wavemind_app/screens/off_watch_games_screen.dart';
+import 'package:wavemind_app/screens/sextant_horizon_screen.dart';
+import 'package:wavemind_app/screens/story_playback_screen.dart';
+import 'package:wavemind_app/screens/weekly_insights_screen.dart';
 
 void main() {
   // A phone-sized surface matching the Figma frames (402x874 logical).
@@ -80,6 +80,7 @@ void main() {
         HomeDashboardScreen(
           leaderboardService: noLeaderboardSync(),
           photoService: noPhoto(),
+          tokenStorage: _FakeTokenStorage(null),
         ),
       );
       await tester
@@ -106,6 +107,7 @@ void main() {
         HomeDashboardScreen(
           leaderboardService: noLeaderboardSync(),
           photoService: noPhoto(),
+          tokenStorage: _FakeTokenStorage(null),
         ),
       );
       await tester.pump();
@@ -125,6 +127,7 @@ void main() {
       HomeDashboardScreen(
         leaderboardService: noLeaderboardSync(),
         photoService: noPhoto(),
+        tokenStorage: _FakeTokenStorage(null),
       ),
     );
     await tester.pump();
@@ -143,6 +146,7 @@ void main() {
         HomeDashboardScreen(
           leaderboardService: noLeaderboardSync(),
           photoService: noPhoto(),
+          tokenStorage: _FakeTokenStorage(null),
         ),
       );
       await tester.pump();
@@ -161,6 +165,7 @@ void main() {
       HomeDashboardScreen(
         leaderboardService: noLeaderboardSync(),
         photoService: noPhoto(),
+        tokenStorage: _FakeTokenStorage(null),
       ),
     );
     await tester.pump();

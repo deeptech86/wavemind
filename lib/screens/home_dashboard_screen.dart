@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../data/auth_api.dart';
+import '../data/auth_token_storage.dart';
 import '../data/leaderboard_service.dart';
 import '../data/models/leaderboard_entry.dart';
 import '../data/models/voyage_status.dart';
@@ -35,9 +37,13 @@ class HomeDashboardScreen extends StatefulWidget {
     WellnessRepository? repository,
     LeaderboardService? leaderboardService,
     ProfilePhotoService? photoService,
+    AuthApi? authApi,
+    AuthTokenStorage? tokenStorage,
   }) : _repository = repository,
        _leaderboardService = leaderboardService,
-       _photoService = photoService;
+       _photoService = photoService,
+       _authApi = authApi,
+       _tokenStorage = tokenStorage;
 
   /// Optional injection point for tests; defaults to the shared on-device repo.
   final WellnessRepository? _repository;
@@ -47,6 +53,12 @@ class HomeDashboardScreen extends StatefulWidget {
 
   /// Optional injection point for tests.
   final ProfilePhotoService? _photoService;
+
+  /// Optional injection point for tests.
+  final AuthApi? _authApi;
+
+  /// Optional injection point for tests.
+  final AuthTokenStorage? _tokenStorage;
 
   @override
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
@@ -129,6 +141,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   _DashboardHeader(
                     repository: _repo,
                     photoService: widget._photoService,
+                    authApi: widget._authApi,
+                    tokenStorage: widget._tokenStorage,
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
@@ -179,10 +193,17 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 // ---------------------------------------------------------------------------
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.repository, this.photoService});
+  const _DashboardHeader({
+    required this.repository,
+    this.photoService,
+    this.authApi,
+    this.tokenStorage,
+  });
 
   final WellnessRepository repository;
   final ProfilePhotoService? photoService;
+  final AuthApi? authApi;
+  final AuthTokenStorage? tokenStorage;
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +225,11 @@ class _DashboardHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _UserProfileBar(photoService: photoService),
+              _UserProfileBar(
+                photoService: photoService,
+                authApi: authApi,
+                tokenStorage: tokenStorage,
+              ),
               const SizedBox(height: 16),
               _VoyageBanner(repository: repository),
             ],
@@ -216,10 +241,16 @@ class _DashboardHeader extends StatelessWidget {
 }
 
 class _UserProfileBar extends StatefulWidget {
-  const _UserProfileBar({this.photoService});
+  const _UserProfileBar({this.photoService, this.authApi, this.tokenStorage});
 
   /// Optional injection point for tests.
   final ProfilePhotoService? photoService;
+
+  /// Optional injection point for tests.
+  final AuthApi? authApi;
+
+  /// Optional injection point for tests.
+  final AuthTokenStorage? tokenStorage;
 
   @override
   State<_UserProfileBar> createState() => _UserProfileBarState();
@@ -228,13 +259,21 @@ class _UserProfileBar extends StatefulWidget {
 class _UserProfileBarState extends State<_UserProfileBar> {
   late final ProfilePhotoService _photoService =
       widget.photoService ?? ProfilePhotoService();
+  late final AuthApi _api = widget.authApi ?? AuthApi();
+  late final AuthTokenStorage _tokenStorage =
+      widget.tokenStorage ?? AuthTokenStorage();
 
   File? _photo;
+
+  /// Null while loading or if the sync fails — the greeting falls back to a
+  /// generic "Sailor" rather than showing a stale or fake name.
+  String? _name;
 
   @override
   void initState() {
     super.initState();
     _loadPhoto();
+    _loadAccount();
   }
 
   Future<void> _loadPhoto() async {
@@ -243,13 +282,26 @@ class _UserProfileBarState extends State<_UserProfileBar> {
     setState(() => _photo = photo);
   }
 
+  Future<void> _loadAccount() async {
+    final token = await _tokenStorage.read();
+    if (token == null) return;
+    try {
+      final account = await _api.me(token);
+      if (!mounted) return;
+      setState(() => _name = account.name);
+    } on AuthApiException {
+      // No backend reachable or session expired — keep the generic fallback.
+    }
+  }
+
   Future<void> _openProfile(BuildContext context) async {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
-    // The photo may have changed while on the Profile screen — pick up the
-    // new one (or its removal) now that we're back.
+    // The name/photo may have changed while on the Profile screen — pick up
+    // the new values now that we're back.
     _loadPhoto();
+    _loadAccount();
   }
 
   @override
@@ -265,7 +317,7 @@ class _UserProfileBarState extends State<_UserProfileBar> {
               Text('Ahoy, First Mate', style: AppTextStyles.bodyMedium),
               const SizedBox(height: 4),
               Text(
-                'Marcus Thorne',
+                _name ?? 'Sailor',
                 style: AppTextStyles.displayName,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -288,7 +340,7 @@ class _UserProfileBarState extends State<_UserProfileBar> {
               clipBehavior: Clip.antiAlias,
               child: _photo != null
                   ? Image.file(_photo!, fit: BoxFit.cover)
-                  : Image.asset(AppAssets.avatar, fit: BoxFit.cover),
+                  : SvgPicture.asset(AppAssets.avatar, fit: BoxFit.cover),
             ),
           ),
         ),

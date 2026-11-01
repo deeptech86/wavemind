@@ -26,7 +26,7 @@ class AuthApiException implements Exception {
   String toString() => 'AuthApiException: $message';
 }
 
-/// Thin HTTP client for the TideWell accounts service (`/auth/*`, plus the
+/// Thin HTTP client for the Wavemind accounts service (`/auth/*`, plus the
 /// account-scoped `/me/points`, `/leaderboard`, `/me/mood`,
 /// `/crew/mood-summary`, and `/crew/message` endpoints).
 ///

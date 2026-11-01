@@ -1,0 +1,27 @@
+name: wavemind
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: wavemind-backend
+    restart: unless-stopped
+    environment:
+      - WAVEMIND_DB_PATH=/app/data/wavemind.db
+    volumes:
+      - wavemind_db:/app/data
+      - wavemind_media:/app/backend/media
+    networks:
+      - traefik-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wavemind-api.rule=Host(`api.wavemind.group`)"
+      - "traefik.http.routers.wavemind-api.entrypoints=websecure"
+      - "traefik.http.routers.wavemind-api.tls.certresolver=le"
+      - "traefik.http.services.wavemind-api.loadbalancer.server.port=8000"
+networks:
+  traefik-proxy:
+    external: true
+volumes:
+  wavemind_db:
+  wavemind_media:

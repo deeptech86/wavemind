@@ -1,13 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for all backend calls (accounts, content catalog). Only
+         declared in the debug/profile manifests by Flutter's default
+         template, which release builds don't inherit. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Read-only smartwatch health data via Health Connect. We request READ
-         access only — TideWell never writes health data and never asks for
+         access only — Wavemind never writes health data and never asks for
          WRITE permissions. See lib/data/health_data_service.dart. -->
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
     <uses-permission android:name="android.permission.health.READ_SLEEP"/>
     <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
 
     <application
-        android:label="tidewell_app"
+        android:label="Wavemind"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:networkSecurityConfig="@xml/network_security_config">

@@ -53,7 +53,7 @@ class HealthDataService {
 
   final Health _health;
 
-  /// Read-only set of metrics TideWell surfaces. Steps and sleep are the core
+  /// Read-only set of metrics Wavemind surfaces. Steps and sleep are the core
   /// ask; heart rate is a trivial stretch add via the same permission grant.
   static const List<HealthDataType> _types = [
     HealthDataType.STEPS,
@@ -61,7 +61,7 @@ class HealthDataService {
     HealthDataType.HEART_RATE,
   ];
 
-  /// READ access only for every type — TideWell never requests WRITE.
+  /// READ access only for every type — Wavemind never requests WRITE.
   static final List<HealthDataAccess> _permissions = List.filled(
     _types.length,
     HealthDataAccess.READ,

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tidewell_app/data/profile_photo_service.dart';
+import 'package:wavemind_app/data/profile_photo_service.dart';
 
 void main() {
   late Directory tempDir;

@@ -6,7 +6,7 @@
   Android automatically applies that block only when the APK is debuggable
   (android:debuggable="true") and strips it from release builds — no
   separate per-variant resource file needed. This lets the app validate the
-  TideWell dev backend's mkcert certificate (see tool/gen_dev_cert.sh) once
+  Wavemind dev backend's mkcert certificate (see tool/gen_dev_cert.sh) once
   that cert's root CA is installed as a user certificate on the device —
   real, OS-trusted HTTPS for local dev, not a cleartext-traffic exception.
 -->

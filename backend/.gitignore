@@ -1,7 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
-tidewell.db
+wavemind.db
 
 # Media is copied out of the app's assets/audio/ by `python -m app.seed`.
 # It is regenerated on demand, so it is not committed.

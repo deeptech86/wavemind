@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.tidewell.tidewell_app"
+    namespace = "com.wavemind.wavemind_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.tidewell.tidewell_app"
+        applicationId = "com.wavemind.wavemind_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Health Connect (the `health` package's Android backend) requires

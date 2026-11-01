@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 
-/// Central typography for TideWell.
+/// Central typography for Wavemind.
 ///
 /// The design uses two typefaces, both available as Google Fonts (so they are
 /// exact matches — no substitution required):
@@ -15,7 +15,7 @@ import 'app_colors.dart';
 abstract final class AppTextStyles {
   // --- Display / headings (Outfit) -----------------------------------------
 
-  /// "Tidewell" wordmark — Outfit Bold 32.
+  /// "Wavemind" wordmark — Outfit Bold 32.
   static TextStyle wordmark = GoogleFonts.outfit(
     fontSize: 32,
     fontWeight: FontWeight.w700,

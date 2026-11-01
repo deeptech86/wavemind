@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tidewell_app/data/health_data_service.dart';
+import 'package:wavemind_app/data/health_data_service.dart';
 
 void main() {
   group('HealthDataService.formatSleepDuration', () {

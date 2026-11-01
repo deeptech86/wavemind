@@ -4,7 +4,7 @@ import 'app_colors.dart';
 import 'app_typography.dart';
 
 /// Assembles the app-wide [ThemeData] from the centralized color and
-/// typography tokens. TideWell is a dark, deep-sea themed experience, so we
+/// typography tokens. Wavemind is a dark, deep-sea themed experience, so we
 /// expose a single dark theme.
 abstract final class AppTheme {
   /// Common radii used across cards, buttons and tiles.

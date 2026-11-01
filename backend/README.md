@@ -1,4 +1,4 @@
-# TideWell Accounts & Content Backend
+# Wavemind Accounts & Content Backend
 
 A deliberately small FastAPI service with two jobs:
 
@@ -14,7 +14,7 @@ A deliberately small FastAPI service with two jobs:
    binary; the device syncs only lightweight metadata and downloads media
    lazily.
 
-Everything else in the TideWell app (journal entries, mood check-ins, breathing
+Everything else in the Wavemind app (journal entries, mood check-ins, breathing
 streaks, Fleet Knots) lives on-device and never touches this service.
 
 > The original single-row `/profile` placeholder endpoint (name/email/phone)
@@ -214,8 +214,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload \
   --ssl-certfile certs/dev-cert.pem --ssl-keyfile certs/dev-key.pem
 ```
 
-The SQLite file is created automatically at `backend/tidewell.db` on first run
-(override with the `TIDEWELL_DB_PATH` env var).
+The SQLite file is created automatically at `backend/wavemind.db` on first run
+(override with the `WAVEMIND_DB_PATH` env var).
 
 ## Quick verification
 

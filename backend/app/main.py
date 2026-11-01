@@ -1,4 +1,4 @@
-"""TideWell backend — accounts + content catalog.
+"""Wavemind backend — accounts + content catalog.
 
 Two concerns, same small stdlib-sqlite3 FastAPI service:
 
@@ -59,7 +59,7 @@ from pydantic import BaseModel, EmailStr, Field
 from . import auth, database, rotation, seed
 from .rate_limit import RateLimiter
 
-app = FastAPI(title="TideWell Accounts & Content Service", version="3.0.0")
+app = FastAPI(title="Wavemind Accounts & Content Service", version="3.0.0")
 
 # Throttles /auth/login per client IP — 10 attempts per 5 minutes. Protects
 # against online password-guessing; deliberately scoped by IP rather than by
@@ -270,7 +270,7 @@ def _startup() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "tidewell-backend"}
+    return {"status": "ok", "service": "wavemind-backend"}
 
 
 # ---------------------------------------------------------------------------

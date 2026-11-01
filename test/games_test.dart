@@ -2,10 +2,10 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tidewell_app/data/games/dominoes_game.dart';
-import 'package:tidewell_app/data/games/fog_signal_echo.dart';
-import 'package:tidewell_app/data/games/knot_puzzle.dart';
-import 'package:tidewell_app/data/games/sextant_balance.dart';
+import 'package:wavemind_app/data/games/dominoes_game.dart';
+import 'package:wavemind_app/data/games/fog_signal_echo.dart';
+import 'package:wavemind_app/data/games/knot_puzzle.dart';
+import 'package:wavemind_app/data/games/sextant_balance.dart';
 
 void main() {
   // ---------------------------------------------------------------------------

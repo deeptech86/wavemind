@@ -1,4 +1,4 @@
-"""Tiny SQLite persistence layer for the TideWell backend.
+"""Tiny SQLite persistence layer for the Wavemind backend.
 
 Deliberately uses the Python standard-library ``sqlite3`` module (no ORM) to
 keep this at the "basic CRUD service" simplicity level the brief asked for.
@@ -26,8 +26,8 @@ from typing import Any, Optional
 # Store the DB file next to the backend package by default; overridable so
 # tests (or a future deployment) can point somewhere else.
 DB_PATH = os.environ.get(
-    "TIDEWELL_DB_PATH",
-    os.path.join(os.path.dirname(os.path.dirname(__file__)), "tidewell.db"),
+    "WAVEMIND_DB_PATH",
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "wavemind.db"),
 )
 
 # Long-lived sessions: there is no refresh-token flow in this pass, so a single

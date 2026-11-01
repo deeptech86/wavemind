@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tidewell_app/screens/login_screen.dart';
-import 'package:tidewell_app/screens/welcome_screen.dart';
+import 'package:wavemind_app/screens/login_screen.dart';
+import 'package:wavemind_app/screens/welcome_screen.dart';
 
 void main() {
   testWidgets('Welcome screen renders and Embark opens Login', (
@@ -17,7 +17,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: WelcomeScreen()));
 
     // Welcome screen content is present.
-    expect(find.text('Tidewell'), findsOneWidget);
+    expect(find.text('Wavemind'), findsOneWidget);
     expect(find.text('Your anchor in open waters'), findsOneWidget);
     expect(find.text('Embark'), findsOneWidget);
 

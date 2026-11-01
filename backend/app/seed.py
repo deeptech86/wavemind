@@ -1,4 +1,4 @@
-"""Day-one content seeding for the TideWell content catalog.
+"""Day-one content seeding for the Wavemind content catalog.
 
 Mirrors the content that currently ships *hardcoded* inside the Flutter app
 (3 narrated stories + 3 ambient soundscapes) onto the server, and copies the
@@ -30,7 +30,7 @@ from . import database
 
 # backend/
 _BACKEND_DIR = os.path.dirname(os.path.dirname(__file__))
-# repo root (…/TideWellApp), one level above backend/
+# repo root (…/WavemindApp), one level above backend/
 _REPO_ROOT = os.path.dirname(_BACKEND_DIR)
 
 # Where the app's bundled audio currently lives, and where we copy it to be
@@ -224,7 +224,7 @@ def seed(force: bool = False) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed the TideWell catalog.")
+    parser = argparse.ArgumentParser(description="Seed the Wavemind catalog.")
     parser.add_argument(
         "--force",
         action="store_true",

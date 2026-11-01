@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tidewell_app/data/models/knot_event.dart';
-import 'package:tidewell_app/data/models/mood_check_in.dart';
-import 'package:tidewell_app/data/models/mood_state.dart';
-import 'package:tidewell_app/data/wellness_stats.dart';
+import 'package:wavemind_app/data/models/knot_event.dart';
+import 'package:wavemind_app/data/models/mood_check_in.dart';
+import 'package:wavemind_app/data/models/mood_state.dart';
+import 'package:wavemind_app/data/wellness_stats.dart';
 
 void main() {
   // The point values are the contract sourced from the Crew screen copy:

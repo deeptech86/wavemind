@@ -11,7 +11,7 @@ import '../theme/app_colors.dart';
 /// paused/stopped. This keeps the meditative motion coherent with whether
 /// audio is actually sounding, rather than running as decoration regardless.
 ///
-/// Uses only existing TideWell palette tokens (seafoam / teal glows) layered
+/// Uses only existing Wavemind palette tokens (seafoam / teal glows) layered
 /// over whatever gradient already sits behind it — it paints additively with
 /// translucent radial glows and never introduces a new opaque background.
 class AmbientPulseBackground extends StatefulWidget {

@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:tidewell_app/core/db/app_database.dart';
-import 'package:tidewell_app/data/models/knot_event.dart';
-import 'package:tidewell_app/data/models/voyage_status.dart';
-import 'package:tidewell_app/data/wellness_repository.dart';
+import 'package:wavemind_app/core/db/app_database.dart';
+import 'package:wavemind_app/data/models/knot_event.dart';
+import 'package:wavemind_app/data/models/voyage_status.dart';
+import 'package:wavemind_app/data/wellness_repository.dart';
 
 /// Exercises [WellnessRepository] against a real, in-process SQLite database
 /// (sqflite FFI) so the ledger writes can be asserted off-device.

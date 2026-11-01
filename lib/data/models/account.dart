@@ -1,4 +1,4 @@
-/// A TideWell user account as returned by the `/auth/*` endpoints.
+/// A Wavemind user account as returned by the `/auth/*` endpoints.
 ///
 /// This is the authenticated sailor's identity record — the only data that
 /// leaves the device. It never carries the password (the backend only ever

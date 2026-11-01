@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Central color palette for TideWell, extracted verbatim from the Figma
+/// Central color palette for Wavemind, extracted verbatim from the Figma
 /// design file (fileKey H1FxgO720R6jkN2ZwdkSkk).
 ///
 /// This is the single source of truth for color across the app. Screens and

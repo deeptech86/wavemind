@@ -18,7 +18,7 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._();
 
-  static const String _fileName = 'tidewell.db';
+  static const String _fileName = 'wavemind.db';
 
   /// v2 adds the content-catalog cache tables (`catalog_stories`,
   /// `catalog_sounds`, `catalog_featured_games`) for the schedule-controlled

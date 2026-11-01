@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tidewell_app/data/models/voyage_status.dart';
+import 'package:wavemind_app/data/models/voyage_status.dart';
 
 void main() {
   group('VoyageStatus.daysRemaining', () {

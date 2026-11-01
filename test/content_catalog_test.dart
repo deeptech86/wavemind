@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tidewell_app/data/models/catalog_models.dart';
-import 'package:tidewell_app/screens/story_playback_screen.dart';
+import 'package:wavemind_app/data/models/catalog_models.dart';
+import 'package:wavemind_app/screens/story_playback_screen.dart';
 
 void main() {
   group('planMediaCache — eviction & preservation', () {

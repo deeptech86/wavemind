@@ -1,4 +1,4 @@
-package com.tidewell.tidewell_app
+package com.wavemind.wavemind_app
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

@@ -231,7 +231,7 @@ class AuthHeader extends StatelessWidget {
           children: [
             SvgPicture.asset(AppAssets.anchorWordmark, width: 20, height: 20),
             const SizedBox(width: 8),
-            Text('Tidewell', style: AppTextStyles.wordmark),
+            Text('Wavemind', style: AppTextStyles.wordmark),
           ],
         ),
         const SizedBox(height: 20),

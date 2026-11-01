@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:tidewell_app/core/db/app_database.dart';
-import 'package:tidewell_app/data/models/voyage_status.dart';
-import 'package:tidewell_app/data/wellness_repository.dart';
-import 'package:tidewell_app/screens/community_connect_screen.dart';
+import 'package:wavemind_app/core/db/app_database.dart';
+import 'package:wavemind_app/data/models/voyage_status.dart';
+import 'package:wavemind_app/data/wellness_repository.dart';
+import 'package:wavemind_app/screens/community_connect_screen.dart';
 
 /// Confirms the Fleet Spirit "Voyage Milestone" card renders the real,
 /// previously-saved [VoyageStatus] (the same on-device record the Helm

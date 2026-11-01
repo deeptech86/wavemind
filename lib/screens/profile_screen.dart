@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
 import '../data/auth_api.dart';
@@ -248,7 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               const SizedBox(height: 20),
                               Text(
-                                'Your crew account. Everything else in TideWell '
+                                'Your crew account. Everything else in Wavemind '
                                 'stays private on this device.',
                                 style: AppTextStyles.bodySmall,
                               ),
@@ -457,7 +458,7 @@ class _ProfilePhotoPicker extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   child: photo != null
                       ? Image.file(photo!, fit: BoxFit.cover)
-                      : Image.asset(AppAssets.avatar, fit: BoxFit.cover),
+                      : SvgPicture.asset(AppAssets.avatar, fit: BoxFit.cover),
                 ),
                 if (busy)
                   Container(

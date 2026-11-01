@@ -11,7 +11,7 @@ import 'login_screen.dart';
 
 /// Onboarding / splash screen (Figma node 3:10 "welcome").
 ///
-/// A sunrise-over-water gradient framing the Tidewell wordmark, a circular
+/// A sunrise-over-water gradient framing the Wavemind wordmark, a circular
 /// illustration, the product promise, and the primary "Embark" call to action.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -120,7 +120,7 @@ class _TextContent extends StatelessWidget {
           children: [
             SvgPicture.asset(AppAssets.anchorWordmark, width: 20, height: 20),
             const SizedBox(width: 8),
-            Text('Tidewell', style: AppTextStyles.wordmark),
+            Text('Wavemind', style: AppTextStyles.wordmark),
           ],
         ),
         const SizedBox(height: 16),

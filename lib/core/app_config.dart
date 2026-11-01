@@ -2,7 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 
-/// Environment / runtime configuration for the TideWell backend (see
+/// Environment / runtime configuration for the Wavemind backend (see
 /// `backend/` — accounts, content catalog, leaderboard).
 ///
 /// `baseUrl` is always `https://` — the dev backend serves real TLS via a

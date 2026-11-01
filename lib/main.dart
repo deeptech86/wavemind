@@ -5,15 +5,15 @@ import 'screens/auth_gate.dart';
 import 'theme/app_theme.dart';
 
 void main() {
-  runApp(const TideWellApp());
+  runApp(const WavemindApp());
 }
 
-class TideWellApp extends StatelessWidget {
-  const TideWellApp({super.key});
+class WavemindApp extends StatelessWidget {
+  const WavemindApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // TideWell uses light content on a dark, deep-sea backdrop.
+    // Wavemind uses light content on a dark, deep-sea backdrop.
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -23,7 +23,7 @@ class TideWellApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: 'TideWell',
+      title: 'Wavemind',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       // The auth gate validates any stored session token on launch and routes

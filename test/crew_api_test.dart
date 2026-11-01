@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:tidewell_app/data/auth_api.dart';
-import 'package:tidewell_app/data/auth_token_storage.dart';
-import 'package:tidewell_app/data/crew_message_service.dart';
-import 'package:tidewell_app/data/crew_mood_service.dart';
-import 'package:tidewell_app/data/models/mood_state.dart';
+import 'package:wavemind_app/data/auth_api.dart';
+import 'package:wavemind_app/data/auth_token_storage.dart';
+import 'package:wavemind_app/data/crew_message_service.dart';
+import 'package:wavemind_app/data/crew_mood_service.dart';
+import 'package:wavemind_app/data/models/mood_state.dart';
 
 /// Records the request it received and always returns [response].
 class _StubClient extends http.BaseClient {

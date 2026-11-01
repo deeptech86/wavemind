@@ -46,7 +46,11 @@ abstract final class AppAssets {
 
   // Raster imagery.
   static const String onboardingSailboat = '$_images/onboarding_sailboat.png';
-  static const String avatar = '$_images/avatar.png';
+
+  /// Default profile-photo placeholder shown until a sailor picks their own
+  /// photo — a seated meditation silhouette against a sunset-over-water
+  /// gradient, drawn in-house (vector, not a licensed stock photo).
+  static const String avatar = '$_images/avatar_placeholder.svg';
 
   // --- Audio (Stage 2) ------------------------------------------------------
   // Placeholder royalty-free beds synthesized locally (pure-Python `wave`),

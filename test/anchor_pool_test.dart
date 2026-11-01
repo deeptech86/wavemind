@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:tidewell_app/data/auth_api.dart';
-import 'package:tidewell_app/data/auth_token_storage.dart';
-import 'package:tidewell_app/data/crew_message_service.dart';
-import 'package:tidewell_app/data/crew_mood_service.dart';
-import 'package:tidewell_app/data/leaderboard_service.dart';
-import 'package:tidewell_app/screens/community_connect_screen.dart';
+import 'package:wavemind_app/data/auth_api.dart';
+import 'package:wavemind_app/data/auth_token_storage.dart';
+import 'package:wavemind_app/data/crew_message_service.dart';
+import 'package:wavemind_app/data/crew_mood_service.dart';
+import 'package:wavemind_app/data/leaderboard_service.dart';
+import 'package:wavemind_app/screens/community_connect_screen.dart';
 
 /// Routes each request to a canned [http.Response] by (method, path), so one
 /// client can stand in for the whole backend across the screen's several
