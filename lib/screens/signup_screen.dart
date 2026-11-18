@@ -185,8 +185,13 @@ class _SignupScreenState extends State<SignupScreen> {
                             final value = v?.trim() ?? '';
                             if (value.isEmpty) return 'Please enter your age.';
                             final age = int.tryParse(value);
-                            if (age == null || age < 0 || age > 150) {
+                            if (age == null || age > 150) {
                               return 'Please enter a valid age.';
+                            }
+                            // Wavemind is a 16+ app — see the Play Store
+                            // Target Audience declaration.
+                            if (age < 16) {
+                              return 'You must be 16 or older to use Wavemind.';
                             }
                             return null;
                           },

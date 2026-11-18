@@ -53,6 +53,7 @@ from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
@@ -271,6 +272,19 @@ def _startup() -> None:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "wavemind-backend"}
+
+
+# Served at a stable, store-listing-friendly path. The file itself lives in
+# app/static/ so editing it doesn't require touching this route.
+_PRIVACY_POLICY_PATH = os.path.join(
+    os.path.dirname(__file__), "static", "privacy-policy.html"
+)
+
+
+@app.get("/privacy-policy", response_class=HTMLResponse)
+def privacy_policy() -> HTMLResponse:
+    with open(_PRIVACY_POLICY_PATH, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
 
 
 # ---------------------------------------------------------------------------
