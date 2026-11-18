@@ -84,6 +84,26 @@ abstract final class AppColors {
   /// Drop shadow beneath raised cards / CTAs.
   static const Color cardShadow = Color(0x4D070F2B); // #070F2B @ 30%
 
+  // --- Stone Cairn Balance tones (irregular stone fills) --------------------
+  static const Color stoneSlate = Color(0xFF6B7280);
+  static const Color stoneTaupe = Color(0xFF9C8671);
+  static const Color stoneAsh = Color(0xFFB8B2A7);
+  static const Color stoneBasalt = Color(0xFF4A4A52);
+  static const Color stoneMoss = Color(0xFF7D8471);
+
+  static const List<Color> stoneTones = [
+    stoneSlate,
+    stoneTaupe,
+    stoneAsh,
+    stoneBasalt,
+    stoneMoss,
+  ];
+
+  // --- Matchstick Puzzle (lit sticks + match heads) -------------------------
+  static const Color matchWood = Color(0xFFD9A066);
+  static const Color matchWoodDark = Color(0xFF8B5E34);
+  static const Color matchHead = Color(0xFFE2574C);
+
   // --- Meditative playback glows (Stage 2 audio-synced animations) ----------
   /// Soft seafoam glow core for the pulsing background while audio plays.
   static const Color seafoamGlow = Color(0x4D57CC99); // seafoam @ 30%

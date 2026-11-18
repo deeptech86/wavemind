@@ -3,6 +3,11 @@
          declared in the debug/profile manifests by Flutter's default
          template, which release builds don't inherit. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Runtime-requested on Android 13+ (see LocalNotificationService) for
+         the meditation / mood check-in / competition reminders. Scheduling
+         uses AndroidScheduleMode.inexactAllowWhileIdle, so the heavier
+         SCHEDULE_EXACT_ALARM permission is deliberately not requested. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Read-only smartwatch health data via Health Connect. We request READ
          access only — Wavemind never writes health data and never asks for
          WRITE permissions. See lib/data/health_data_service.dart. -->

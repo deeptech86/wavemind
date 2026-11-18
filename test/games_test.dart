@@ -2,10 +2,13 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:wavemind_app/data/games/calm_your_waves.dart';
 import 'package:wavemind_app/data/games/dominoes_game.dart';
 import 'package:wavemind_app/data/games/fog_signal_echo.dart';
 import 'package:wavemind_app/data/games/knot_puzzle.dart';
+import 'package:wavemind_app/data/games/matchstick_puzzle.dart';
 import 'package:wavemind_app/data/games/sextant_balance.dart';
+import 'package:wavemind_app/data/games/stone_cairn.dart';
 
 void main() {
   // ---------------------------------------------------------------------------
@@ -621,6 +624,415 @@ void main() {
       final game = FogSignalEcho(random: Random(1));
       game.nextRound();
       expect(() => game.sequence.add(FogSignal.bow), throwsUnsupportedError);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Calm Your Waves — flash-and-recall memory match.
+  // ---------------------------------------------------------------------------
+
+  group('CalmYourWaves', () {
+    test('level 0 starts at 2 pairs, the top level at 32 pairs', () {
+      final first = CalmYourWaves.level(0, random: Random(1));
+      expect(first.pairCount, 2);
+      expect(first.tileCount, 4);
+
+      final last = CalmYourWaves.level(
+        CalmYourWaves.maxLevelIndex,
+        random: Random(1),
+      );
+      expect(last.pairCount, 32);
+      expect(last.tileCount, 64);
+      expect(last.hasNextLevel, isFalse);
+    });
+
+    test('every design id appears in exactly two tiles', () {
+      final game = CalmYourWaves.level(5, random: Random(7));
+      final counts = <int, int>{};
+      for (final d in game.designs) {
+        counts[d] = (counts[d] ?? 0) + 1;
+      }
+      expect(counts.values, everyElement(2));
+      expect(counts.keys.toSet(), {for (var i = 0; i < game.pairCount; i++) i});
+    });
+
+    test('tapping a matching pair matches both and they stay face up', () {
+      final game = CalmYourWaves.level(0, random: Random(1));
+      final design = game.designs[0];
+      final partner = game.designs.indexOf(design, 1);
+
+      expect(game.tap(0), CalmTapResult.picked);
+      expect(game.tap(partner), CalmTapResult.matched);
+      expect(game.isMatched(0), isTrue);
+      expect(game.isMatched(partner), isTrue);
+      expect(game.matchedPairs, 1);
+      expect(game.isComplete, isFalse); // level 0 has 2 pairs; one remains
+    });
+
+    test('tapping a mismatched pair reveals both until cleared, then locks '
+        'further taps', () {
+      final game = CalmYourWaves.level(2, random: Random(3)); // 4 pairs
+      // Find two tiles with different designs.
+      var a = 0;
+      var b = 1;
+      while (game.designs[a] == game.designs[b]) {
+        b++;
+      }
+
+      expect(game.tap(a), CalmTapResult.picked);
+      final result = game.tap(b);
+      expect(result, CalmTapResult.mismatch);
+      expect(game.hasPendingMismatch, isTrue);
+      expect(game.pendingMismatch, containsAll([a, b]));
+      expect(game.isFaceUp(a), isTrue);
+      expect(game.isFaceUp(b), isTrue);
+
+      // Further taps are locked until the mismatch is cleared.
+      final other = (List<int>.generate(game.tileCount, (i) => i)
+            ..removeWhere((i) => i == a || i == b))
+          .first;
+      expect(game.tap(other), CalmTapResult.ignored);
+
+      game.clearMismatch();
+      expect(game.hasPendingMismatch, isFalse);
+      expect(game.isFaceUp(a), isFalse);
+      expect(game.isFaceUp(b), isFalse);
+      expect(game.tap(other), CalmTapResult.picked);
+    });
+
+    test('tapping an already-matched or already-picked tile is ignored', () {
+      final game = CalmYourWaves.level(1, random: Random(4));
+      expect(game.tap(0), CalmTapResult.picked);
+      expect(game.tap(0), CalmTapResult.ignored); // same tile twice
+    });
+
+    test('nextLevel advances pair count and resets progress', () {
+      final level0 = CalmYourWaves.level(0, random: Random(1));
+      final level1 = level0.nextLevel();
+      expect(level1.levelIndex, 1);
+      expect(level1.pairCount, 3);
+      expect(level1.matchedPairs, 0);
+      expect(level1.isComplete, isFalse);
+    });
+
+    test('retryLevel reshuffles the same level with progress reset', () {
+      final game = CalmYourWaves.level(3, random: Random(9));
+      game.tap(0);
+      final retried = game.retryLevel();
+      expect(retried.levelIndex, game.levelIndex);
+      expect(retried.matchedPairs, 0);
+      expect(retried.isFaceUp(0), isFalse);
+    });
+
+    test('restart always returns to level 0', () {
+      final game = CalmYourWaves.level(8, random: Random(2));
+      final restarted = game.restart();
+      expect(restarted.levelIndex, 0);
+      expect(restarted.pairCount, 2);
+    });
+
+    test('designs is unmodifiable', () {
+      final game = CalmYourWaves.level(0, random: Random(1));
+      expect(() => game.designs.add(0), throwsUnsupportedError);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Stone Cairn Balance — drag-to-stack sandbox.
+  // ---------------------------------------------------------------------------
+
+  group('StoneCairn', () {
+    test('generates the requested stone count, none placed, biggest first', () {
+      final cairn = StoneCairn.generate(stoneCount: 7, random: Random(1));
+      expect(cairn.stoneCount, 7);
+      expect(cairn.placedCount, 0);
+      expect(cairn.isComplete, isFalse);
+      expect(cairn.stackOrder, isEmpty);
+      expect(cairn.stones.every((s) => !cairn.isPlaced(s.id)), isTrue);
+      // Biggest-first generation order (radii only trend downward, since
+      // each is jittered a little for irregularity).
+      expect(cairn.stones.first.radius, greaterThan(cairn.stones.last.radius));
+    });
+
+    test('dropping a stone joins the top of the tower', () {
+      final cairn = StoneCairn.generate(stoneCount: 3, random: Random(2));
+      expect(cairn.isPlaced(0), isFalse);
+
+      cairn.dropOnTop(0);
+
+      expect(cairn.isPlaced(0), isTrue);
+      expect(cairn.stackOrder, [0]);
+      expect(cairn.placedCount, 1);
+      expect(cairn.fraction, closeTo(1 / 3, 1e-9));
+    });
+
+    test('each new drop joins on top, in drop order', () {
+      final cairn = StoneCairn.generate(stoneCount: 3, random: Random(2));
+      cairn.dropOnTop(2);
+      cairn.dropOnTop(0);
+      cairn.dropOnTop(1);
+
+      expect(cairn.stackOrder, [2, 0, 1]); // bottom -> top, by drop order
+    });
+
+    test('re-dropping an already-placed stone moves it back to the top', () {
+      final cairn = StoneCairn.generate(stoneCount: 3, random: Random(2));
+      cairn.dropOnTop(0);
+      cairn.dropOnTop(1);
+      cairn.dropOnTop(2);
+      expect(cairn.stackOrder, [0, 1, 2]);
+
+      cairn.dropOnTop(0); // pick stone 0 back up, restack on top
+      expect(cairn.stackOrder, [1, 2, 0]);
+      expect(cairn.placedCount, 3); // still just 3 stones total
+    });
+
+    test('offsetFraction is clamped to [-1, 1] and drives the tilt', () {
+      final cairn = StoneCairn.generate(stoneCount: 1, random: Random(2));
+      cairn.dropOnTop(0, offsetFraction: 5.0); // way out of range
+      expect(cairn.byId(0).offsetFraction, 1.0);
+
+      cairn.dropOnTop(0, offsetFraction: -5.0);
+      expect(cairn.byId(0).offsetFraction, -1.0);
+
+      cairn.dropOnTop(0, offsetFraction: 0);
+      expect(cairn.byId(0).tilt, closeTo(0, 0.05)); // just the jitter term
+    });
+
+    test('isComplete once every stone has joined the tower at least once', () {
+      final cairn = StoneCairn.generate(stoneCount: 3, random: Random(3));
+      cairn.dropOnTop(0);
+      cairn.dropOnTop(1);
+      expect(cairn.isComplete, isFalse);
+
+      cairn.dropOnTop(2);
+      expect(cairn.isComplete, isTrue);
+      expect(cairn.fraction, 1.0);
+    });
+
+    test('newRound discards the tower and reshuffles unplaced', () {
+      final cairn = StoneCairn.generate(stoneCount: 4, random: Random(4));
+      cairn.dropOnTop(0);
+      final fresh = cairn.newRound(random: Random(5));
+
+      expect(fresh.stoneCount, cairn.stoneCount);
+      expect(fresh.placedCount, 0);
+      expect(fresh.stackOrder, isEmpty);
+    });
+
+    test('stacking roughly biggest-to-smallest, centered, stays stable', () {
+      final cairn = StoneCairn.generate(stoneCount: 7, random: Random(6));
+      // Generation order is already biggest-first.
+      for (var id = 0; id < 7; id++) {
+        final outcome = cairn.dropOnTop(id, offsetFraction: 0);
+        expect(outcome, DropOutcome.stable, reason: 'stone $id');
+      }
+      expect(cairn.stackOrder.length, 7);
+    });
+
+    test('a meaningfully bigger stone on top of a much smaller one topples '
+        'the tower', () {
+      final cairn = StoneCairn.generate(stoneCount: 7, random: Random(6));
+      // id 6 is the smallest (last generated), id 0 the biggest.
+      expect(cairn.dropOnTop(6, offsetFraction: 0), DropOutcome.stable);
+      final outcome = cairn.dropOnTop(0, offsetFraction: 0);
+      expect(outcome, DropOutcome.unstable);
+      // The drop still registers — collapse is a separate explicit step.
+      expect(cairn.stackOrder, [6, 0]);
+    });
+
+    test('a stone leaning too far on top of another topples the tower, even '
+        'when the size order is fine', () {
+      final cairn = StoneCairn.generate(stoneCount: 7, random: Random(6));
+      // id 0 (biggest) under id 1 (next biggest) is a perfectly normal size
+      // order — only the lean should trip this.
+      expect(cairn.dropOnTop(0, offsetFraction: 0), DropOutcome.stable);
+      final outcome = cairn.dropOnTop(1, offsetFraction: 0.9);
+      expect(outcome, DropOutcome.unstable);
+    });
+
+    test('the base stone tolerates more lean than a stacked stone before '
+        'toppling', () {
+      final cairn = StoneCairn.generate(stoneCount: 1, random: Random(6));
+      // Between the stacked and ground lean limits: fine resting directly
+      // on the ground, would not be if this were stone-on-stone.
+      expect(cairn.dropOnTop(0, offsetFraction: 0.7), DropOutcome.stable);
+      expect(cairn.dropOnTop(0, offsetFraction: 0.95), DropOutcome.unstable);
+    });
+
+    test('collapse empties the tower — every stone returns to the tray', () {
+      final cairn = StoneCairn.generate(stoneCount: 7, random: Random(6));
+      cairn.dropOnTop(6, offsetFraction: 0);
+      final outcome = cairn.dropOnTop(0, offsetFraction: 0); // topples
+      expect(outcome, DropOutcome.unstable);
+
+      cairn.collapse();
+
+      expect(cairn.stackOrder, isEmpty);
+      expect(cairn.placedCount, 0);
+      expect(cairn.isPlaced(0), isFalse);
+      expect(cairn.isPlaced(6), isFalse);
+      expect(cairn.stoneCount, 7); // the stones themselves are untouched
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Matchstick Puzzle — relocate one seven-segment stick.
+  // ---------------------------------------------------------------------------
+
+  group('MatchstickPuzzle', () {
+    test('every curated bank puzzle is solvable in exactly one move', () {
+      for (final puzzle in MatchstickPuzzle.bank()) {
+        expect(
+          puzzle.findSolutions(),
+          isNotEmpty,
+          reason: 'prompt: ${puzzle.prompt}',
+        );
+      }
+    });
+
+    test('fixEquation: solving the known move makes a false equation true', () {
+      // "3+2=3" -> move the result digit's topRight stick to topLeft:
+      // 3 (segments {0,2,3,5,6}) -> 5 (segments {0,1,3,5,6}).
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '3+2=3',
+        type: MatchPuzzleType.fixEquation,
+        prompt: 'fix it',
+      );
+      expect(puzzle.isSolved, isFalse); // false equation, no move made yet
+
+      final result = puzzle.move(4, 2, 4, 1);
+      expect(result, MoveResult.moved);
+      expect(puzzle.digitValueAt(4), 5);
+      expect(puzzle.isSolved, isTrue); // 3+2=5
+    });
+
+    test('a move producing a broken (non-digit) shape is rejected', () {
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '1-8=1',
+        type: MatchPuzzleType.fixEquation,
+        prompt: 'fix it',
+      );
+      // Token 0 is digit 1 ({2,5}); moving its topRight stick to topLeft
+      // leaves {1,5}, which isn't any real digit.
+      final result = puzzle.move(0, 2, 0, 1);
+      expect(result, MoveResult.invalid);
+      expect(puzzle.hasMoved, isFalse);
+      expect(puzzle.digitValueAt(0), 1); // unchanged
+    });
+
+    test('cross-digit donation: a shed stick can complete a different token', () {
+      // "1-8=1": the 8 (token 2) sheds its topRight stick, donated to the
+      // first 1 (token 0)'s top slot -> 7 - 6 = 1, which is true.
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '1-8=1',
+        type: MatchPuzzleType.fixEquation,
+        prompt: 'fix it',
+      );
+      final result = puzzle.move(2, 2, 0, 0);
+      expect(result, MoveResult.moved);
+      expect(puzzle.digitValueAt(0), 7);
+      expect(puzzle.digitValueAt(2), 6);
+      expect(puzzle.isSolved, isTrue); // 7-6=1
+    });
+
+    test('only one move is allowed per round', () {
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '3+2=3',
+        type: MatchPuzzleType.fixEquation,
+        prompt: 'fix it',
+      );
+      expect(puzzle.move(4, 2, 4, 1), MoveResult.moved);
+      // Any further move, even a no-op-shaped one, is rejected once moved.
+      expect(puzzle.move(4, 1, 4, 2), MoveResult.invalid);
+    });
+
+    test('reset restores the original layout and clears hasMoved', () {
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '3+2=3',
+        type: MatchPuzzleType.fixEquation,
+        prompt: 'fix it',
+      );
+      puzzle.move(4, 2, 4, 1);
+      expect(puzzle.hasMoved, isTrue);
+
+      puzzle.reset();
+      expect(puzzle.hasMoved, isFalse);
+      expect(puzzle.digitValueAt(4), 3);
+      expect(puzzle.isSolved, isFalse);
+    });
+
+    test('differentDigit: moving a stick to a non-digit shape is rejected, '
+        'a valid reshape solves it', () {
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '2',
+        type: MatchPuzzleType.differentDigit,
+        prompt: 'different digit',
+      );
+      // 2 ({0,2,3,4,6}) -> 3 ({0,2,3,5,6}): move bottomLeft to bottomRight.
+      final result = puzzle.move(0, 4, 0, 5);
+      expect(result, MoveResult.moved);
+      expect(puzzle.digitValueAt(0), 3);
+      expect(puzzle.isSolved, isTrue);
+    });
+
+    test('differentDigit: 9 has two different valid single-move solutions', () {
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '9',
+        type: MatchPuzzleType.differentDigit,
+        prompt: 'different digit',
+      );
+      final solutions = puzzle.findSolutions();
+      final reachableDigits = <int>{};
+      for (final move in solutions) {
+        final fresh = MatchstickPuzzle.fromNotation(
+          '9',
+          type: MatchPuzzleType.differentDigit,
+          prompt: 'different digit',
+        );
+        fresh.move(move.fromToken, move.fromSegment, move.toToken, move.toSegment);
+        reachableDigits.add(fresh.digitValueAt(0)!);
+      }
+      expect(reachableDigits, containsAll([0, 6]));
+    });
+
+    test('biggestNumber: "177" is beatable, and the max is actually reached '
+        'by at least one move', () {
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '177',
+        type: MatchPuzzleType.biggestNumber,
+        prompt: 'biggest number',
+      );
+      final solutions = puzzle.findSolutions();
+      expect(solutions, isNotEmpty);
+
+      final move = solutions.first;
+      puzzle.move(move.fromToken, move.fromSegment, move.toToken, move.toSegment);
+      expect(puzzle.isSolved, isTrue);
+
+      final value = [0, 1, 2]
+          .map((i) => puzzle.digitValueAt(i))
+          .fold<int>(0, (acc, d) => acc * 10 + d!);
+      expect(value, greaterThan(177)); // strictly better than the start
+    });
+
+    test('biggestNumber: a non-maximal move is a legal relocation but '
+        'leaves the puzzle unsolved', () {
+      // "177": reshaping is impossible for 1/7, but donating the *wrong*
+      // direction (there isn't one here) isn't available — instead verify
+      // directly that an arbitrary non-winning outcome (if any exists)
+      // never reports solved. Since both legal moves for "177" happen to
+      // both win, assert against a puzzle with a clear non-winning move
+      // instead: "619", reshaping the trailing 9 -> 6 is legal but not best.
+      final puzzle = MatchstickPuzzle.fromNotation(
+        '619',
+        type: MatchPuzzleType.biggestNumber,
+        prompt: 'biggest number',
+      );
+      final result = puzzle.move(2, 2, 2, 4); // 9 {0,1,2,3,5,6} -> 6 (swap topRight for bottomLeft)
+      expect(result, MoveResult.moved);
+      expect(puzzle.digitValueAt(2), 6);
+      expect(puzzle.isSolved, isFalse); // "616" is not the max of "619"
     });
   });
 }

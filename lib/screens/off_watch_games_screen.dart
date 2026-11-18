@@ -11,14 +11,17 @@ import 'game_catalog.dart';
 
 /// "Off-Watch Mind Games" hub (Stitch "offwatch_mind_games" redesign).
 ///
-/// A featured focus ritual plus the catalog of five tactile decompression
-/// games. All five are wired through and playable; only the featured
-/// ritual itself remains presentational and surfaces a "coming soon" cue.
+/// Seven tactile decompression games exist and are all fully playable, but
+/// only **2** are shown/playable in any given week — a random (but
+/// per-week-stable) pick, same window the server computes via
+/// `rotation.featured_window` and Haven's preview row uses. This keeps the
+/// catalog feeling fresh rather than dumping all seven on the player at
+/// once. Before any sync — or offline — [weeklyGames] computes the same
+/// pick client-side so the limit still holds.
 ///
-/// Which games carry a "Featured this week" spotlight (and sort first) is
-/// driven by the content catalog's `featured_game` flags, synced on open.
-/// Before any sync — or offline — all five show normally in their default
-/// order. Featuring never hides a game.
+/// (A "Celestial Wayfinder" featured-ritual placeholder used to sit above
+/// this catalog — removed since it was never built; the slot can return
+/// once a real constellation/wayfinding game exists.)
 class OffWatchGamesScreen extends StatefulWidget {
   const OffWatchGamesScreen({super.key, ContentCatalogRepository? catalog})
     : _catalog = catalog;
@@ -33,7 +36,7 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
   late final ContentCatalogRepository _catalog =
       widget._catalog ?? ContentCatalogRepository();
 
-  /// The five built-in games in their default catalog order — shared with
+  /// The seven built-in games in their default catalog order — shared with
   /// Haven's preview row via [gameCatalog] so they can never drift apart.
   static const List<GameCatalogEntry> _games = gameCatalog;
 
@@ -66,12 +69,12 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
     super.dispose();
   }
 
-  /// Games ordered featured-first (spotlight), preserving default order within
-  /// each group. All five are always present.
-  List<GameCatalogEntry> get _orderedGames {
-    final featured = [for (final g in _games) if (_featuredKeys.contains(g.key)) g];
-    final rest = [for (final g in _games) if (!_featuredKeys.contains(g.key)) g];
-    return [...featured, ...rest];
+  /// This week's 2 games: the server's real pick once synced (filtering the
+  /// full catalog down to just those keys), else a client-computed
+  /// [weeklyGames] fallback so the limit still applies offline/pre-sync.
+  List<GameCatalogEntry> get _weeksGames {
+    if (_featuredKeys.isEmpty) return weeklyGames(DateTime.now());
+    return [for (final g in _games) if (_featuredKeys.contains(g.key)) g];
   }
 
   void _comingSoon(BuildContext context, String name) {
@@ -101,7 +104,7 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final games = _orderedGames;
+    final games = _weeksGames;
     final tiles = <Widget>[];
     for (var i = 0; i < games.length; i++) {
       final game = games[i];
@@ -115,7 +118,6 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
           description: game.description,
           meta: game.meta,
           ready: game.ready,
-          featured: _featuredKeys.contains(game.key),
           onTap: () => _openGame(context, game),
         ),
       );
@@ -140,11 +142,6 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
                     children: [
                       const _IntroCard(),
                       const SizedBox(height: 20),
-                      _FeaturedRitual(
-                        onPlay: () =>
-                            _comingSoon(context, 'Celestial Wayfinder'),
-                      ),
-                      const SizedBox(height: 24),
                       Row(
                         children: [
                           const Icon(
@@ -161,7 +158,10 @@ class _OffWatchGamesScreenState extends State<OffWatchGamesScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text('5 in fleet', style: AppTextStyles.caption),
+                          Text(
+                            '${games.length} of ${_games.length} this week',
+                            style: AppTextStyles.caption,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -244,274 +244,6 @@ class _IntroCard extends StatelessWidget {
   }
 }
 
-class _FeaturedRitual extends StatelessWidget {
-  const _FeaturedRitual({required this.onPlay});
-
-  final VoidCallback onPlay;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        border: Border.all(color: AppColors.seafoamBorder),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.cardShadow,
-            offset: Offset(0, 10),
-            blurRadius: 16,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Row(
-                  children: [
-                    const Icon(Icons.star, size: 14, color: AppColors.seafoam),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        'FEATURED FOCUS RITUAL',
-                        style: AppTextStyles.badge,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.sandFaint,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                ),
-                child: Text(
-                  'Astrometry Mode',
-                  style: AppTextStyles.badge.copyWith(color: AppColors.sand),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text('Celestial Wayfinder', style: AppTextStyles.cardHeading),
-          const SizedBox(height: 4),
-          Text(
-            'Nautical astrometry: align the night constellation grid to true '
-            'magnetic north.',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.white),
-          ),
-          const SizedBox(height: 14),
-          const _ConstellationArena(),
-          const SizedBox(height: 14),
-          const _RitualStats(),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: Material(
-              color: AppColors.seafoam,
-              borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-              child: InkWell(
-                onTap: onPlay,
-                borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.play_arrow,
-                        size: 20,
-                        color: AppColors.onAccent,
-                      ),
-                      const SizedBox(width: 8),
-                      Text('Play Alignment', style: AppTextStyles.buttonLarge),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConstellationArena extends StatelessWidget {
-  const _ConstellationArena();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 150,
-      decoration: BoxDecoration(
-        color: AppColors.deepNavy,
-        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-        border: Border.all(color: AppColors.tealBorder),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          _ring(128, AppColors.tealBorder),
-          _ring(96, AppColors.glassBorder),
-          _ring(64, AppColors.sandFaint),
-          const _Star(alignment: Alignment(-0.5, -0.5), size: 9),
-          const _Star(alignment: Alignment(0.55, -0.4), size: 7),
-          const _Star(alignment: Alignment(0.45, 0.5), size: 7),
-          const _Star(alignment: Alignment(-0.45, 0.55), size: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.overlayDark,
-              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-              border: Border.all(color: AppColors.tealBorder),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.navigation_outlined,
-                  size: 14,
-                  color: AppColors.seafoam,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Bearing: 194° S by W',
-                  style: AppTextStyles.caption.copyWith(color: AppColors.cream),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _ring(double size, Color color) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: color),
-      ),
-    );
-  }
-}
-
-class _Star extends StatelessWidget {
-  const _Star({required this.alignment, required this.size});
-
-  final Alignment alignment;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: alignment,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppColors.sand,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.sand.withValues(alpha: 0.6),
-              blurRadius: 8,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RitualStats extends StatelessWidget {
-  const _RitualStats();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.glassFillFaint,
-        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
-        border: Border.all(color: AppColors.glassBorderSoft),
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: const [
-            Expanded(
-              child: _Stat(
-                label: 'Difficulty',
-                value: 'Calm Seas',
-                color: AppColors.seafoam,
-              ),
-            ),
-            VerticalDivider(color: AppColors.glassBorder, width: 1),
-            Expanded(
-              child: _Stat(
-                label: 'Cognitive Load',
-                value: '-28% HRV',
-                color: AppColors.teal,
-              ),
-            ),
-            VerticalDivider(color: AppColors.glassBorder, width: 1),
-            Expanded(
-              child: _Stat(
-                label: 'Est. Time',
-                value: '5-8 mins',
-                color: AppColors.sand,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(label, style: AppTextStyles.caption),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: AppTextStyles.bodyStrong.copyWith(color: color),
-        ),
-      ],
-    );
-  }
-}
-
 class _CatalogTile extends StatelessWidget {
   const _CatalogTile({
     required this.icon,
@@ -522,7 +254,6 @@ class _CatalogTile extends StatelessWidget {
     required this.meta,
     required this.onTap,
     this.ready = false,
-    this.featured = false,
   });
 
   final String icon;
@@ -534,10 +265,6 @@ class _CatalogTile extends StatelessWidget {
   final VoidCallback onTap;
   final bool ready;
 
-  /// Spotlight flag from the server's weekly featured set. Adds a "Featured
-  /// this week" marker + highlighted border; never affects playability.
-  final bool featured;
-
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -548,12 +275,6 @@ class _CatalogTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         child: Container(
           padding: const EdgeInsets.all(14),
-          decoration: featured
-              ? BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                  border: Border.all(color: AppColors.seafoamBorder),
-                )
-              : null,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -577,26 +298,6 @@ class _CatalogTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (featured) ...[
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.star,
-                            size: 12,
-                            color: AppColors.seafoam,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'FEATURED THIS WEEK',
-                            style: AppTextStyles.badge.copyWith(
-                              color: AppColors.seafoam,
-                              fontSize: 9,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                    ],
                     Row(
                       children: [
                         Expanded(

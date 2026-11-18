@@ -11,6 +11,10 @@
 **/DerivedData/
 Icon?
 **/Pods/
+# CocoaPods' newer cache mode symlinks Pods/ to an absolute path outside the
+# repo (~/Library/Caches/...) instead of making it a real directory — the
+# pattern above only matches actual directories, not this symlink.
+Pods
 **/.symlinks/
 profile
 xcuserdata

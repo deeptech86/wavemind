@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/notifications/notification_provider.dart' as notifications;
+import '../core/notifications/notification_service.dart';
 import '../data/auth_api.dart';
 import '../data/auth_token_storage.dart';
 import '../theme/app_colors.dart';
@@ -11,12 +13,20 @@ import 'login_screen.dart';
 /// On success it stores the session token securely and replaces the whole
 /// stack with the Helm dashboard.
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key, AuthApi? api, AuthTokenStorage? tokenStorage})
-    : _api = api,
-      _tokenStorage = tokenStorage;
+  const SignupScreen({
+    super.key,
+    AuthApi? api,
+    AuthTokenStorage? tokenStorage,
+    NotificationService? notificationService,
+  }) : _api = api,
+       _tokenStorage = tokenStorage,
+       _notificationService = notificationService;
 
   final AuthApi? _api;
   final AuthTokenStorage? _tokenStorage;
+
+  /// Optional injection point for tests.
+  final NotificationService? _notificationService;
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -27,6 +37,8 @@ class _SignupScreenState extends State<SignupScreen> {
   late final bool _ownsApi = widget._api == null;
   late final AuthTokenStorage _tokenStorage =
       widget._tokenStorage ?? AuthTokenStorage();
+  late final NotificationService _notificationService =
+      widget._notificationService ?? notifications.notificationService;
 
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
@@ -56,6 +68,14 @@ class _SignupScreenState extends State<SignupScreen> {
         fleetName: _fleetCtrl.text.trim(),
       );
       await _tokenStorage.save(result.token);
+      try {
+        if (await _notificationService.requestPermission()) {
+          await _notificationService.showSignupWelcome();
+          await _notificationService.scheduleDailyReminders();
+        }
+      } catch (_) {
+        // Best-effort — a notification-plugin hiccup must never block signup.
+      }
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => const HomeDashboardScreen()),

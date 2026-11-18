@@ -57,43 +57,6 @@ def write_wav(name, samples):
     print(f"wrote {path} ({len(samples)/SR:.1f}s)")
 
 
-def rolling_deep_sea(body_s=18.0, fade_s=0.5):
-    """Low-frequency ocean swell: brown-ish noise, heavy low-pass, slow swell."""
-    n = int((body_s + fade_s) * SR)
-    out = []
-    brown = 0.0
-    lp = 0.0
-    for i in range(n):
-        t = i / SR
-        white = random.uniform(-1.0, 1.0)
-        brown = brown * 0.985 + white * 0.08  # leaky integrator -> red-ish
-        lp += 0.015 * (brown - lp)            # one-pole LP ~ 50 Hz
-        # Two swell LFOs (integer cycles over body for continuity).
-        swell = (0.55 + 0.45 * math.sin(2 * math.pi * 2 * t / body_s)) \
-            * (0.7 + 0.3 * math.sin(2 * math.pi * 3 * t / body_s + 1.1))
-        out.append(lp * swell)
-    out = crossfade_loop(out, int(fade_s * SR))
-    return normalize(out, 0.85)
-
-
-def steel_hull_rain(body_s=16.0, fade_s=0.5):
-    """White-noise rain hiss with high-pass colouring and gentle gusts."""
-    n = int((body_s + fade_s) * SR)
-    out = []
-    hp_y = 0.0
-    hp_x = 0.0
-    for i in range(n):
-        t = i / SR
-        white = random.uniform(-1.0, 1.0)
-        # One-pole high-pass to push energy toward "hiss".
-        hp_y = 0.9 * (hp_y + white - hp_x)
-        hp_x = white
-        gust = 0.75 + 0.25 * math.sin(2 * math.pi * 2 * t / body_s + 0.5)
-        out.append(hp_y * 0.5 * gust)
-    out = crossfade_loop(out, int(fade_s * SR))
-    return normalize(out, 0.6)
-
-
 def foghorn_bell(body_s=18.0, fade_s=0.5):
     """Low foghorn drone (beating sines) + a soft decaying bell every 6 s."""
     n = int((body_s + fade_s) * SR)
@@ -133,37 +96,68 @@ def foghorn_bell(body_s=18.0, fade_s=0.5):
     return normalize(out, 0.8)
 
 
-def tidal_breath(body_s=19.2, fade_s=0.6):
-    """Calm breathing-pace pad: soft low drone + fifth, under a slow swell LFO
-    pulsing at a ~9.6 s breathe cycle (two cycles over the loop), plus a faint
-    ocean wash. Meant to sit *under* the Tidal Breath visual exercise."""
-    n = int((body_s + fade_s) * SR)
-    out = []
+def stone_settle():
+    """A short, non-looping dull stone-on-stone thud/clink for Stone Cairn
+    Balance: a low thump (filtered noise burst) plus a brief higher clink
+    overtone, both decaying fast. just_audio's `setPitch` varies this per
+    stone so repeated placements don't sound identical."""
+    dur = 0.45
+    n = int(dur * SR)
+    out = [0.0] * n
     lp = 0.0
-
-    def intfreq(f):
-        cycles = max(1, round(f * body_s))
-        return cycles / body_s
-
-    root = intfreq(128.0)      # ~C3
-    fifth = intfreq(192.0)     # perfect fifth
     for i in range(n):
         t = i / SR
-        # Breathing LFO: 2 full breaths over the loop (~9.6 s each).
-        breathe = 0.5 + 0.5 * math.sin(2 * math.pi * 2 * t / body_s - math.pi / 2)
-        pad = (math.sin(2 * math.pi * root * t)
-               + 0.6 * math.sin(2 * math.pi * fifth * t)) * 0.16
         white = random.uniform(-1.0, 1.0)
-        lp += 0.01 * (white - lp)  # very soft wash
-        out.append(pad * (0.4 + 0.6 * breathe) + lp * 0.25 * breathe)
-    out = crossfade_loop(out, int(fade_s * SR))
-    return normalize(out, 0.7)
+        lp += 0.06 * (white - lp)  # soft low-pass -> dull thump body
+        thump_env = math.exp(-t / 0.09)
+        clink = math.sin(2 * math.pi * 1400 * t) * math.exp(-t / 0.04) * 0.25
+        out[i] = lp * thump_env * 0.9 + clink
+    return normalize(out, 0.85)
+
+
+def stone_collapse():
+    """A short tumbling-stones clatter for Stone Cairn Balance's toppled-tower
+    moment: several overlapping dull thumps of falling/colliding stones at
+    staggered times, decaying in amplitude, plus a little high-passed
+    "clatter" noise for the scatter at the end."""
+    dur = 0.9
+    n = int(dur * SR)
+    out = [0.0] * n
+
+    def thump(start_t, amp, lp_coeff=0.06, body=0.09):
+        start = int(start_t * SR)
+        lp = 0.0
+        for i in range(int(body * SR)):
+            idx = start + i
+            if idx >= n:
+                break
+            t = i / SR
+            white = random.uniform(-1.0, 1.0)
+            lp += lp_coeff * (white - lp)
+            out[idx] += lp * math.exp(-t / (body * 0.45)) * amp
+
+    # Staggered thumps as stones hit and tumble, roughly loudest first.
+    starts = [0.0, 0.08, 0.17, 0.24, 0.34, 0.46, 0.6]
+    for i, s in enumerate(starts):
+        thump(s, amp=0.9 * (0.82 ** i))
+
+    # A scatter of high-passed clatter noise trailing off at the end.
+    hp_y = 0.0
+    hp_x = 0.0
+    clatter_start = int(0.3 * SR)
+    for i in range(clatter_start, n):
+        t = (i - clatter_start) / SR
+        white = random.uniform(-1.0, 1.0)
+        hp_y = 0.85 * (hp_y + white - hp_x)
+        hp_x = white
+        out[i] += hp_y * 0.12 * math.exp(-t / 0.35)
+
+    return normalize(out, 0.9)
 
 
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
-    write_wav("rolling_deep_sea.wav", rolling_deep_sea())
-    write_wav("steel_hull_rain.wav", steel_hull_rain())
     write_wav("foghorn_bell.wav", foghorn_bell())
-    write_wav("tidal_breath.wav", tidal_breath())
+    write_wav("stone_settle.wav", stone_settle())
+    write_wav("stone_collapse.wav", stone_collapse())
     print("done")

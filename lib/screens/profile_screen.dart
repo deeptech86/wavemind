@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../core/notifications/notification_provider.dart' as notifications;
+import '../core/notifications/notification_service.dart';
 import '../data/auth_api.dart';
 import '../data/auth_token_storage.dart';
 import '../data/profile_photo_service.dart';
@@ -31,15 +33,20 @@ class ProfileScreen extends StatefulWidget {
     AuthApi? api,
     AuthTokenStorage? tokenStorage,
     ProfilePhotoService? photoService,
+    NotificationService? notificationService,
   }) : _api = api,
        _tokenStorage = tokenStorage,
-       _photoService = photoService;
+       _photoService = photoService,
+       _notificationService = notificationService;
 
   final AuthApi? _api;
   final AuthTokenStorage? _tokenStorage;
 
   /// Optional injection point for tests.
   final ProfilePhotoService? _photoService;
+
+  /// Optional injection point for tests.
+  final NotificationService? _notificationService;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -52,6 +59,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       widget._tokenStorage ?? AuthTokenStorage();
   late final ProfilePhotoService _photoService =
       widget._photoService ?? ProfilePhotoService();
+  late final NotificationService _notificationService =
+      widget._notificationService ?? notifications.notificationService;
 
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
@@ -189,6 +198,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
     await _tokenStorage.clear();
+    try {
+      await _notificationService.cancelAll();
+    } catch (_) {
+      // Best-effort — a notification-plugin hiccup must never block logout.
+    }
     if (!mounted) return;
     _returnToWelcome();
   }

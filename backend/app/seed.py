@@ -1,12 +1,12 @@
 """Day-one content seeding for the Wavemind content catalog.
 
 Mirrors the content that currently ships *hardcoded* inside the Flutter app
-(3 narrated stories + 3 ambient soundscapes) onto the server, and copies the
+(3 narrated stories + 10 ambient soundscapes) onto the server, and copies the
 real audio files out of the app's ``assets/audio/`` bundle into
 ``backend/media/`` so the seeded catalog serves genuinely playable media from
 the first request.
 
-The five built-in games are registered in ``featured_game``, all five marked
+The seven built-in games are registered in ``featured_game``, all seven marked
 eligible for the weekly rotation pool — see ``app.rotation`` for how 2 of the
 eligible games get spotlighted as "Featured this week" automatically, on a
 rolling 7-day cadence, with no manual toggling required.
@@ -40,18 +40,20 @@ MEDIA_DIR = os.path.join(_BACKEND_DIR, "media")
 MEDIA_STORIES_DIR = os.path.join(MEDIA_DIR, "stories")
 MEDIA_SOUNDS_DIR = os.path.join(MEDIA_DIR, "sounds")
 
-# The five built-in game identifiers (must match `GameKeys` on the Flutter side
-# and the tiles in off_watch_games_screen.dart).
+# The seven built-in game identifiers (must match `GameKeys` on the Flutter
+# side and the tiles in off_watch_games_screen.dart).
 GAME_KEYS = [
     "calm_your_waves",
     "knot_master",
     "fog_signal_echo",
     "sextant_horizon",
     "cabin_dominoes",
+    "stone_cairn",
+    "matchstick_puzzle",
 ]
 
 # Games eligible for the weekly rotation pool (see `app.rotation`). Only
-# games that are actually playable belong here — all five now ship (see
+# games that are actually playable belong here — all seven now ship (see
 # off_watch_games_screen.dart's `ready` flags). Which 2 of these are
 # featured *this week* is computed automatically, not chosen here.
 ELIGIBLE_FOR_ROTATION = {
@@ -60,6 +62,8 @@ ELIGIBLE_FOR_ROTATION = {
     "fog_signal_echo",
     "sextant_horizon",
     "cabin_dominoes",
+    "stone_cairn",
+    "matchstick_puzzle",
 }
 
 # Day-one stories. ``source`` is the bundled asset copied into media/stories/
@@ -123,25 +127,68 @@ _STORY_SEED = [
     },
 ]
 
-# Day-one ambient soundscapes.
+# Day-one ambient soundscapes — ids must match `AppAssets.audioAmbient*` and
+# the bundled-fallback / catalog-id maps in `haven_screen.dart`.
 _SOUND_SEED = [
     {
-        "id": "rolling_deep_sea",
-        "source": "rolling_deep_sea.wav",
-        "label": "Rolling Deep Sea",
-        "subtitle": "Low Frequency",
+        "id": "slow_drift",
+        "source": "ambient_slow_drift.mp3",
+        "label": "A Slow Drift",
+        "subtitle": "Hanna Lindgren",
     },
     {
-        "id": "steel_hull_rain",
-        "source": "steel_hull_rain.wav",
-        "label": "Steel Hull Rain",
-        "subtitle": "White Noise",
+        "id": "forest_birdsong",
+        "source": "ambient_forest_birdsong.mp3",
+        "label": "Forest Birdsong",
+        "subtitle": "Nature SFX",
     },
     {
-        "id": "foghorn_bell",
-        "source": "foghorn_bell.wav",
-        "label": "Foghorn & Bell",
-        "subtitle": "Distant Anchor",
+        "id": "closed_eyes_speak",
+        "source": "ambient_closed_eyes_speak.mp3",
+        "label": "Closed Eyes Speak",
+        "subtitle": "Calm Shores",
+    },
+    {
+        "id": "december_im_home",
+        "source": "ambient_december_im_home.mp3",
+        "label": "December, I'm Home",
+        "subtitle": "Johannes Bornlof",
+    },
+    {
+        "id": "delta_wave_drone",
+        "source": "ambient_delta_wave_drone.mp3",
+        "label": "Delta Wave Drone",
+        "subtitle": "Binaural Relaxation",
+    },
+    {
+        "id": "everbloom",
+        "source": "ambient_everbloom.mp3",
+        "label": "Everbloom",
+        "subtitle": "Center of Attention",
+    },
+    {
+        "id": "gentle_solace",
+        "source": "ambient_gentle_solace.mp3",
+        "label": "Gentle Solace",
+        "subtitle": "Amber Glow",
+    },
+    {
+        "id": "recovery_again",
+        "source": "ambient_recovery_again.mp3",
+        "label": "Recovery Again",
+        "subtitle": "Elin Piel",
+    },
+    {
+        "id": "quiet_spa",
+        "source": "ambient_quiet_spa.mp3",
+        "label": "The Quiet Spa",
+        "subtitle": "Mandala Dreams",
+    },
+    {
+        "id": "lapping_lake",
+        "source": "ambient_lapping_lake.mp3",
+        "label": "Lapping Lake Water",
+        "subtitle": "Nature SFX",
     },
 ]
 

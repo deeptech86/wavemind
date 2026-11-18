@@ -142,7 +142,7 @@ def init_db() -> None:
             )
             """
         )
-        # Which of the five built-in games are "featured" right now. No new game
+        # Which of the seven built-in games are "featured" right now. No new game
         # content ever flows through here — only the spotlight flag + ordering.
         conn.execute(
             """

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
+import '../core/notifications/notification_provider.dart' as notifications;
+import '../core/notifications/notification_service.dart';
 import '../data/auth_api.dart';
 import '../data/auth_token_storage.dart';
 import '../data/leaderboard_service.dart';
@@ -15,6 +17,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/auth_form.dart';
+import '../widgets/port_autocomplete_field.dart';
 import '../widgets/tide_bottom_nav.dart';
 import 'community_connect_screen.dart';
 import 'haven_screen.dart';
@@ -39,11 +42,13 @@ class HomeDashboardScreen extends StatefulWidget {
     ProfilePhotoService? photoService,
     AuthApi? authApi,
     AuthTokenStorage? tokenStorage,
+    NotificationService? notificationService,
   }) : _repository = repository,
        _leaderboardService = leaderboardService,
        _photoService = photoService,
        _authApi = authApi,
-       _tokenStorage = tokenStorage;
+       _tokenStorage = tokenStorage,
+       _notificationService = notificationService;
 
   /// Optional injection point for tests; defaults to the shared on-device repo.
   final WellnessRepository? _repository;
@@ -60,6 +65,9 @@ class HomeDashboardScreen extends StatefulWidget {
   /// Optional injection point for tests.
   final AuthTokenStorage? _tokenStorage;
 
+  /// Optional injection point for tests.
+  final NotificationService? _notificationService;
+
   @override
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
 }
@@ -69,6 +77,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       widget._repository ?? WellnessRepository();
   late final LeaderboardService _leaderboardService =
       widget._leaderboardService ?? LeaderboardService();
+  late final NotificationService _notificationService =
+      widget._notificationService ?? notifications.notificationService;
 
   ContributionSummary _summary = ContributionSummary.empty;
 
@@ -80,6 +90,22 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   void initState() {
     super.initState();
     _loadSummary();
+    _setUpNotifications();
+  }
+
+  /// Requests the OS notification permission and (if granted) (re)schedules
+  /// every recurring reminder. Runs every time the Helm loads — on login, on
+  /// the post-signup redirect, and on a cold start with a valid session — so
+  /// the competition countdown content stays fresh and a returning sailor
+  /// who ignored the permission prompt before gets asked again.
+  Future<void> _setUpNotifications() async {
+    try {
+      final granted = await _notificationService.requestPermission();
+      if (granted) await _notificationService.scheduleDailyReminders();
+    } catch (_) {
+      // Best-effort — a notification-plugin hiccup must never break the
+      // dashboard.
+    }
   }
 
   Future<void> _loadSummary() async {
@@ -555,20 +581,16 @@ class _VoyageBannerState extends State<_VoyageBanner> {
         ),
         if (_formState == VoyageState.voyage) ...[
           const SizedBox(height: 12),
-          AuthTextField(
+          PortAutocompleteField(
             label: 'From',
             controller: _originCtrl,
             hint: 'e.g. Yokohama',
-            textCapitalizationWords: true,
-            fillColor: AppColors.glassFill,
           ),
           const SizedBox(height: 10),
-          AuthTextField(
+          PortAutocompleteField(
             label: 'To',
             controller: _destinationCtrl,
             hint: 'e.g. Valparaiso',
-            textCapitalizationWords: true,
-            fillColor: AppColors.glassFill,
           ),
           const SizedBox(height: 10),
           AuthTextField(

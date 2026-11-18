@@ -52,20 +52,47 @@ abstract final class AppAssets {
   /// gradient, drawn in-house (vector, not a licensed stock photo).
   static const String avatar = '$_images/avatar_placeholder.svg';
 
-  // --- Audio (Stage 2) ------------------------------------------------------
-  // Placeholder royalty-free beds synthesized locally (pure-Python `wave`),
-  // plus macOS `say`-generated narration. All to be swapped for real narration
-  // / sound design later. See assets/audio/ and scratchpad/synth_audio.py.
+  // --- Audio ------------------------------------------------------------
+  // A mix of licensed Epidemic Sound tracks (ambient soundscapes + the Tidal
+  // Breath score) and placeholder beds synthesized locally (pure-Python
+  // `wave`) for sounds that aren't part of the licensed set. See
+  // assets/audio/ and tool/synth_audio.py.
 
-  /// Seamlessly-looping ambient beds (mono 22.05 kHz WAV).
-  static const String audioRollingDeepSea = '$_audio/rolling_deep_sea.wav';
-  static const String audioSteelHullRain = '$_audio/steel_hull_rain.wav';
   static const String audioFoghornBell = '$_audio/foghorn_bell.wav';
 
-  /// Calming breathing-pace pad looped under the Tidal Breath exercise.
-  static const String audioTidalBreath = '$_audio/tidal_breath.wav';
+  /// Licensed meditation score ("A New Beginning" — Jakob Ahlbom) looped
+  /// under the Tidal Breath exercise.
+  static const String audioTidalBreath = '$_audio/tidal_breath.mp3';
+
+  /// The ten licensed Ambient Cabin Soundscape beds — ids match
+  /// `backend/app/seed.py`'s `_SOUND_SEED` and `haven_screen.dart`'s
+  /// bundled-fallback / catalog-id maps.
+  static const String audioAmbientSlowDrift = '$_audio/ambient_slow_drift.mp3';
+  static const String audioAmbientForestBirdsong =
+      '$_audio/ambient_forest_birdsong.mp3';
+  static const String audioAmbientClosedEyesSpeak =
+      '$_audio/ambient_closed_eyes_speak.mp3';
+  static const String audioAmbientDecemberImHome =
+      '$_audio/ambient_december_im_home.mp3';
+  static const String audioAmbientDeltaWaveDrone =
+      '$_audio/ambient_delta_wave_drone.mp3';
+  static const String audioAmbientEverbloom = '$_audio/ambient_everbloom.mp3';
+  static const String audioAmbientGentleSolace =
+      '$_audio/ambient_gentle_solace.mp3';
+  static const String audioAmbientRecoveryAgain =
+      '$_audio/ambient_recovery_again.mp3';
+  static const String audioAmbientQuietSpa = '$_audio/ambient_quiet_spa.mp3';
+  static const String audioAmbientLappingLake =
+      '$_audio/ambient_lapping_lake.mp3';
 
   /// Spoken-word narration placeholder for the featured Lighthouse chapter
   /// (macOS `say -v Daniel`, encoded to AAC/M4A via `afconvert`).
   static const String audioLighthouseChapter = '$_audio/lighthouse_chapter.m4a';
+
+  /// Short, non-looping stone-on-stone thud for Stone Cairn Balance, pitched
+  /// per stone via `setPitch` so repeated placements don't sound identical.
+  static const String audioStoneSettle = '$_audio/stone_settle.wav';
+
+  /// Tumbling-stones clatter played when a Stone Cairn Balance tower topples.
+  static const String audioStoneCollapse = '$_audio/stone_collapse.wav';
 }

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-/// Identifiers for the five built-in off-watch games. These are the only
+/// Identifiers for the seven built-in off-watch games. These are the only
 /// values the server's `featured_game.game_key` may take, and they must match
 /// the tiles rendered in `off_watch_games_screen.dart` and the seed on the
 /// backend (`backend/app/seed.py`). No new game *content* ever flows through
@@ -11,6 +11,8 @@ abstract final class GameKeys {
   static const String fogSignalEcho = 'fog_signal_echo';
   static const String sextantHorizon = 'sextant_horizon';
   static const String cabinDominoes = 'cabin_dominoes';
+  static const String stoneCairn = 'stone_cairn';
+  static const String matchstickPuzzle = 'matchstick_puzzle';
 
   static const List<String> all = [
     calmYourWaves,
@@ -18,6 +20,8 @@ abstract final class GameKeys {
     fogSignalEcho,
     sextantHorizon,
     cabinDominoes,
+    stoneCairn,
+    matchstickPuzzle,
   ];
 }
 

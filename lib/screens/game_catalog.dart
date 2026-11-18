@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../core/app_assets.dart';
@@ -6,10 +8,12 @@ import '../theme/app_colors.dart';
 import 'cabin_dominoes_screen.dart';
 import 'fog_signal_echo_screen.dart';
 import 'knot_master_screen.dart';
+import 'matchstick_puzzle_screen.dart';
 import 'mindful_game_screen.dart';
 import 'sextant_horizon_screen.dart';
+import 'stone_cairn_screen.dart';
 
-/// Single source of truth for the five built-in off-watch games — shared by
+/// Single source of truth for the seven built-in off-watch games — shared by
 /// the full catalog ([off_watch_games_screen.dart]) and Haven's preview row
 /// ([haven_screen.dart]) so they can never drift apart (e.g. Haven showing
 /// placeholder game names that don't match what's actually playable).
@@ -39,7 +43,7 @@ class GameCatalogEntry {
   final Widget Function() screenBuilder;
 }
 
-/// The five built-in games, in default catalog order.
+/// The seven built-in games, in default catalog order.
 const List<GameCatalogEntry> gameCatalog = [
   GameCatalogEntry(
     key: GameKeys.calmYourWaves,
@@ -48,8 +52,10 @@ const List<GameCatalogEntry> gameCatalog = [
     title: 'Calm Your Waves',
     badge: 'Ready',
     description:
-        'Match soothing ocean pairs to quiet the mind between watches.',
-    meta: '2-4m • Memory match',
+        'Flash-and-recall memory match — the board flips face up for a '
+        'moment, then you hunt for every pair from memory. Climbs from 4 '
+        'tiles to the full 64.',
+    meta: '2-32 pairs • Memory match',
     ready: true,
     screenBuilder: _buildCalmYourWaves,
   ),
@@ -105,6 +111,33 @@ const List<GameCatalogEntry> gameCatalog = [
     ready: true,
     screenBuilder: _buildCabinDominoes,
   ),
+  GameCatalogEntry(
+    key: GameKeys.stoneCairn,
+    icon: AppAssets.mapPin,
+    accent: AppColors.muted,
+    title: 'Stone Cairn Balance',
+    badge: 'Ready',
+    description:
+        'Stack flattened river stones into a single balanced tower — stray '
+        'too far off-center or stack a big stone on a small one and the '
+        'whole tower topples.',
+    meta: '7 stones • Balance tower',
+    ready: true,
+    screenBuilder: _buildStoneCairn,
+  ),
+  GameCatalogEntry(
+    key: GameKeys.matchstickPuzzle,
+    icon: AppAssets.lightbulbOff,
+    accent: AppColors.stormRed,
+    title: 'Matchstick Puzzle',
+    badge: 'Ready',
+    description:
+        'Relocate exactly one matchstick — fix a false equation, find the '
+        'biggest number in one move, or turn a digit into a different one.',
+    meta: '1 move • Logic puzzle',
+    ready: true,
+    screenBuilder: _buildMatchstickPuzzle,
+  ),
 ];
 
 // Plain top-level functions (rather than inline closures above) so each
@@ -114,3 +147,26 @@ Widget _buildKnotMaster() => const KnotMasterScreen();
 Widget _buildFogSignalEcho() => const FogSignalEchoScreen();
 Widget _buildSextantHorizon() => const SextantHorizonScreen();
 Widget _buildCabinDominoes() => const CabinDominoesScreen();
+Widget _buildStoneCairn() => const StoneCairnScreen();
+Widget _buildMatchstickPuzzle() => const MatchstickPuzzleScreen();
+
+/// Picks a random-looking but deterministic [count] of [catalog] for the
+/// week containing [date] — no persistence or backend needed. The same
+/// local calendar week always yields the same picks (so it's stable across
+/// app restarts/navigation within the week, and is also the offline
+/// fallback before the server's real `featured_game` set has synced — see
+/// `off_watch_games_screen.dart`), and the week's shuffle seed changes every
+/// week, so which 2 come up doesn't walk a fixed order the way
+/// `dailyLore`/`dailySounds` do — it genuinely varies week to week.
+List<GameCatalogEntry> weeklyGames(
+  DateTime date, {
+  List<GameCatalogEntry> catalog = gameCatalog,
+  int count = 2,
+}) {
+  if (catalog.isEmpty) return const [];
+  final localMidnight = DateTime(date.year, date.month, date.day);
+  final weekIndex = localMidnight.millisecondsSinceEpoch ~/ (7 * 86400000);
+  final shuffled = List<GameCatalogEntry>.of(catalog)..shuffle(Random(weekIndex));
+  final n = count < shuffled.length ? count : shuffled.length;
+  return shuffled.sublist(0, n);
+}

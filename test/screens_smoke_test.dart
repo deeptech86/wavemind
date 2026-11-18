@@ -1,12 +1,15 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:wavemind_app/core/notifications/notification_service.dart';
 import 'package:wavemind_app/data/auth_api.dart';
 import 'package:wavemind_app/data/auth_token_storage.dart';
 import 'package:wavemind_app/data/crew_message_service.dart';
 import 'package:wavemind_app/data/crew_mood_service.dart';
+import 'package:wavemind_app/data/games/calm_your_waves.dart';
 import 'package:wavemind_app/data/leaderboard_service.dart';
 import 'package:wavemind_app/data/models/account.dart';
 import 'package:wavemind_app/data/profile_photo_service.dart';
@@ -19,6 +22,7 @@ import 'package:wavemind_app/screens/welcome_screen.dart';
 import 'package:wavemind_app/screens/cabin_dominoes_screen.dart';
 import 'package:wavemind_app/screens/community_connect_screen.dart';
 import 'package:wavemind_app/screens/fog_signal_echo_screen.dart';
+import 'package:wavemind_app/screens/game_catalog.dart';
 import 'package:wavemind_app/screens/guided_breathing_screen.dart';
 import 'package:wavemind_app/screens/haven_screen.dart';
 import 'package:wavemind_app/screens/journal_entry_screen.dart';
@@ -26,7 +30,9 @@ import 'package:wavemind_app/screens/knot_master_screen.dart';
 import 'package:wavemind_app/screens/mindful_game_screen.dart';
 import 'package:wavemind_app/screens/mood_check_in_screen.dart';
 import 'package:wavemind_app/screens/off_watch_games_screen.dart';
+import 'package:wavemind_app/screens/matchstick_puzzle_screen.dart';
 import 'package:wavemind_app/screens/sextant_horizon_screen.dart';
+import 'package:wavemind_app/screens/stone_cairn_screen.dart';
 import 'package:wavemind_app/screens/story_playback_screen.dart';
 import 'package:wavemind_app/screens/weekly_insights_screen.dart';
 
@@ -52,6 +58,8 @@ void main() {
       CrewMessageService(tokenStorage: _FakeTokenStorage(null));
   // Same reasoning: path_provider has no mock registered either.
   ProfilePhotoService noPhoto() => _FakePhotoService();
+  // The real LocalNotificationService hits a platform channel too.
+  NotificationService noNotifications() => _FakeNotificationService();
 
   testWidgets('mood check-in renders its sections', (tester) async {
     await pumpScreen(tester, const MoodCheckInScreen());
@@ -81,6 +89,7 @@ void main() {
           leaderboardService: noLeaderboardSync(),
           photoService: noPhoto(),
           tokenStorage: _FakeTokenStorage(null),
+          notificationService: noNotifications(),
         ),
       );
       await tester
@@ -108,6 +117,7 @@ void main() {
           leaderboardService: noLeaderboardSync(),
           photoService: noPhoto(),
           tokenStorage: _FakeTokenStorage(null),
+          notificationService: noNotifications(),
         ),
       );
       await tester.pump();
@@ -128,6 +138,7 @@ void main() {
         leaderboardService: noLeaderboardSync(),
         photoService: noPhoto(),
         tokenStorage: _FakeTokenStorage(null),
+        notificationService: noNotifications(),
       ),
     );
     await tester.pump();
@@ -147,6 +158,7 @@ void main() {
           leaderboardService: noLeaderboardSync(),
           photoService: noPhoto(),
           tokenStorage: _FakeTokenStorage(null),
+          notificationService: noNotifications(),
         ),
       );
       await tester.pump();
@@ -166,6 +178,7 @@ void main() {
         leaderboardService: noLeaderboardSync(),
         photoService: noPhoto(),
         tokenStorage: _FakeTokenStorage(null),
+        notificationService: noNotifications(),
       ),
     );
     await tester.pump();
@@ -175,6 +188,47 @@ void main() {
     await tester.pump();
     expect(find.text('Voyage Details'), findsOneWidget);
   });
+
+  testWidgets(
+    'helm voyage From/To autocomplete port suggestions by city name',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        HomeDashboardScreen(
+          leaderboardService: noLeaderboardSync(),
+          photoService: noPhoto(),
+          tokenStorage: _FakeTokenStorage(null),
+          notificationService: noNotifications(),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Voyage'));
+      await tester.pump();
+
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.at(0), 'Yoko');
+      await tester.pumpAndSettle();
+      expect(find.text('Yokohama, Japan'), findsOneWidget);
+      await tester.tap(find.text('Yokohama, Japan'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(fields.at(1), 'Valpara');
+      await tester.pumpAndSettle();
+      expect(find.text('Valparaiso, Chile'), findsOneWidget);
+      await tester.tap(find.text('Valparaiso, Chile'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(fields.at(2), '21');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+
+      expect(
+        find.text('Voyage: Yokohama, Japan to Valparaiso, Chile'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('crew renders the fleet spirit tab by default', (tester) async {
     await pumpScreen(
@@ -268,9 +322,7 @@ void main() {
   });
 
   testWidgets('haven hub renders its sections', (tester) async {
-    // Wide enough that the 5-card game preview row (no cap now) is fully
-    // built — ListView lazily builds only what's on/near screen.
-    await tester.binding.setSurfaceSize(const Size(1300, 874));
+    await tester.binding.setSurfaceSize(const Size(900, 874));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(const MaterialApp(home: HavenScreen()));
     await tester.pump();
@@ -279,21 +331,34 @@ void main() {
     expect(find.text('Tidal Breath'), findsOneWidget);
     // Off-Watch Mind Games moved here, between Sleep Lore and Ambient Sounds.
     expect(find.text('OFF-WATCH MIND GAMES'), findsOneWidget);
-    // The preview row is driven by the real game catalog now (no static
-    // placeholder cards, no 3-card cap) — every real game shows, including
-    // the newly-built Fog Signal Echo.
-    expect(find.text('Calm Your Waves'), findsOneWidget);
-    expect(find.text('Knot Master 3D'), findsOneWidget);
-    expect(find.text('Fog Signal Echo'), findsOneWidget);
-    expect(find.text('Sextant Horizon Balance'), findsOneWidget);
-    expect(find.text('Cabin Dominoes'), findsOneWidget);
+    // _SectionHeader upper-cases its title.
+    expect(find.text('AMBIENT CABIN SOUNDSCAPES'), findsOneWidget);
+
+    // Capped to this week's 2 games (random-but-stable per week; no sync in
+    // a widget test, so this is the client-side weeklyGames() fallback —
+    // same thing the screen itself falls back to).
+    final thisWeek = weeklyGames(DateTime.now());
+    expect(thisWeek, hasLength(2));
+    for (final game in thisWeek) {
+      expect(find.text(game.title), findsOneWidget);
+    }
+    final notThisWeek = [
+      for (final g in gameCatalog)
+        if (!thisWeek.any((w) => w.key == g.key)) g,
+    ];
+    for (final game in notThisWeek) {
+      expect(find.text(game.title), findsNothing);
+    }
   });
 
-  testWidgets('off-watch games hub renders featured + catalog', (tester) async {
+  testWidgets('off-watch games hub renders the catalog', (tester) async {
     await pumpScreen(tester, const OffWatchGamesScreen());
     expect(find.text('Off-Watch Mind Games'), findsOneWidget);
-    expect(find.text('Celestial Wayfinder'), findsOneWidget);
-    expect(find.text('Calm Your Waves'), findsOneWidget);
+    // The "Celestial Wayfinder" featured-ritual placeholder was removed —
+    // it was never a real game, just a "coming soon" mockup.
+    expect(find.text('Celestial Wayfinder'), findsNothing);
+    expect(find.text('Maritime Mind Catalog'), findsOneWidget);
+    expect(find.textContaining('of ${gameCatalog.length} this week'), findsOneWidget);
   });
 
   testWidgets('story playback renders the featured tale', (tester) async {
@@ -312,9 +377,33 @@ void main() {
   });
 
   testWidgets('mindful game renders the board header', (tester) async {
-    await pumpScreen(tester, const MindfulGameScreen());
+    await pumpScreen(tester, MindfulGameScreen(random: Random(1)));
     expect(find.text('Calm Your Waves'), findsOneWidget);
     expect(find.text('Hint'), findsOneWidget);
+    expect(find.text('1 / 10'), findsOneWidget); // level 1 of 10
+    // Drain the initial 3s preview-flash timer so it doesn't fire after the
+    // test ends.
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('mindful game: tapping a matching pair clears it', (tester) async {
+    // Same seed the screen below uses for its level-0 board, so the matching
+    // partner index is known ahead of time.
+    final reference = CalmYourWaves.level(0, random: Random(1));
+    final design = reference.designs[0];
+    final partner = reference.designs.indexOf(design, 1);
+
+    await pumpScreen(tester, MindfulGameScreen(random: Random(1)));
+    expect(find.text('0 / 2'), findsOneWidget); // no pairs matched yet
+    // Let the 3s preview flash finish before tapping.
+    await tester.pump(const Duration(seconds: 3));
+
+    await tester.tap(find.byKey(const ValueKey('calm_tile_0')));
+    await tester.pump();
+    await tester.tap(find.byKey(ValueKey('calm_tile_$partner')));
+    await tester.pump();
+
+    expect(find.text('1 / 2'), findsOneWidget); // one pair matched
   });
 
   testWidgets('knot master renders its tying arena', (tester) async {
@@ -363,11 +452,72 @@ void main() {
     expect(find.text('THE LINE'), findsOneWidget);
   });
 
-  testWidgets('off-watch games hub wires the three new games', (tester) async {
+  testWidgets('stone cairn renders its arena and tray', (tester) async {
+    // Wide enough that the 7-stone tray row (a horizontal ListView) is fully
+    // built — it lazily builds only what's on/near screen.
+    await tester.binding.setSurfaceSize(const Size(900, 874));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(home: StoneCairnScreen(random: Random(1))),
+    );
+    await tester.pump();
+
+    expect(find.text('Stone Cairn Balance'), findsOneWidget);
+    expect(find.text('Build Your Cairn'), findsOneWidget);
+    expect(find.text('0 / 7'), findsOneWidget); // nothing placed yet
+    expect(find.text('New Stones'), findsOneWidget);
+    expect(find.byType(Draggable<int>), findsNWidgets(7)); // the tray stones
+  });
+
+  testWidgets('matchstick puzzle renders a puzzle with instructions', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MatchstickPuzzleScreen(random: Random(1)));
+    expect(find.text('Matchstick Puzzle'), findsOneWidget);
+    expect(find.text('Shift One Stick'), findsOneWidget);
+    expect(find.text('Hint'), findsOneWidget);
+    expect(find.text('New Puzzle'), findsOneWidget);
+  });
+
+  testWidgets('matchstick puzzle: dragging the known stick solves it', (
+    tester,
+  ) async {
+    // Seed 8 selects bank puzzle index 0 ("3+2=3"); its known solution drags
+    // the result digit's topRight stick (token 4, segment 2) onto its
+    // topLeft slot (token 4, segment 1), turning 3+2=3 into 3+2=5.
+    await pumpScreen(tester, MatchstickPuzzleScreen(random: Random(8)));
+
+    final source = find.byKey(const ValueKey('match_stick_4_2'));
+    final destination = find.byKey(const ValueKey('match_slot_4_1'));
+    expect(source, findsOneWidget);
+    expect(destination, findsOneWidget);
+
+    final delta = tester.getCenter(destination) - tester.getCenter(source);
+    await tester.drag(source, delta);
+    await tester.pump();
+
+    expect(find.text('Solved!'), findsOneWidget);
+  });
+
+  testWidgets('off-watch games hub shows only this week\'s 2 games', (
+    tester,
+  ) async {
     await pumpScreen(tester, const OffWatchGamesScreen());
-    expect(find.text('Knot Master 3D'), findsOneWidget);
-    expect(find.text('Sextant Horizon Balance'), findsOneWidget);
-    expect(find.text('Cabin Dominoes'), findsOneWidget);
+
+    // No sync in a widget test, so the screen falls back to the same
+    // client-side weeklyGames() the test computes here.
+    final thisWeek = weeklyGames(DateTime.now());
+    expect(thisWeek, hasLength(2));
+    for (final game in thisWeek) {
+      expect(find.text(game.title), findsOneWidget);
+    }
+    final notThisWeek = [
+      for (final g in gameCatalog)
+        if (!thisWeek.any((w) => w.key == g.key)) g,
+    ];
+    for (final game in notThisWeek) {
+      expect(find.text(game.title), findsNothing);
+    }
   });
 
   testWidgets('login screen renders its fields + cross-link', (tester) async {
@@ -403,6 +553,7 @@ void main() {
         api: api,
         tokenStorage: _FakeTokenStorage('valid-token'),
         photoService: noPhoto(),
+        notificationService: noNotifications(),
       ),
     );
     await tester.pumpAndSettle();
@@ -435,6 +586,7 @@ void main() {
           api: _FakeAuthApi(),
           tokenStorage: _FakeTokenStorage('valid-token'),
           photoService: photoService,
+          notificationService: noNotifications(),
         ),
       );
       await tester.pumpAndSettle();
@@ -455,7 +607,12 @@ void main() {
     final api = _FakeAuthApi();
     await pumpScreen(
       tester,
-      ProfileScreen(api: api, tokenStorage: storage, photoService: noPhoto()),
+      ProfileScreen(
+        api: api,
+        tokenStorage: storage,
+        photoService: noPhoto(),
+        notificationService: noNotifications(),
+      ),
     );
     await tester.pumpAndSettle();
     // The profile photo picker at the top of the form can push "Log Out"
@@ -585,4 +742,25 @@ class _FakePhotoService extends ProfilePhotoService {
     if (toPick != null) current = toPick;
     return toPick;
   }
+}
+
+/// No-op stand-in — the real `LocalNotificationService` hits a plugin
+/// platform channel with no mock handler registered in widget tests.
+class _FakeNotificationService implements NotificationService {
+  @override
+  Future<void> initialize({
+    void Function(NotificationTarget target)? onNotificationTap,
+  }) async {}
+
+  @override
+  Future<bool> requestPermission() async => false;
+
+  @override
+  Future<void> showSignupWelcome() async {}
+
+  @override
+  Future<void> scheduleDailyReminders() async {}
+
+  @override
+  Future<void> cancelAll() async {}
 }

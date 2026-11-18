@@ -19,11 +19,17 @@ import 'story_playback_screen.dart';
 ///
 /// Replaces the old direct-to-breathing "Breathe" tab: the hub gathers the
 /// Tidal Breath regulation session, watch-reset drills, sleep lore / sea
-/// stories, and ambient soundscapes. The Tidal Breath CTA and the story cards
-/// navigate to working screens, and (Stage 2) the Ambient Cabin Soundscape
-/// tiles toggle real looping playback of their generated beds — one at a time,
-/// with a meditative glow behind the active tile. The watch-reset drills remain
-/// presentational.
+/// stories, Off-Watch Mind Games, and ambient soundscapes. The Tidal Breath
+/// CTA and the story cards navigate to working screens, and the Ambient
+/// Cabin Soundscape tiles toggle real looping playback of their licensed
+/// Epidemic Sound tracks — one at a time, with a meditative glow behind the
+/// active tile. The watch-reset drills remain presentational.
+///
+/// Two catalogs here are deliberately capped and rotating rather than
+/// showing everything at once: [_games] shows only this week's 2 (see
+/// [weeklyGames] / the server's `rotation.featured_window`), and [_sounds]
+/// shows only today's 3 (see [_dailySounds]) — both out of the full built-in
+/// sets.
 class HavenScreen extends StatefulWidget {
   const HavenScreen({super.key, ContentCatalogRepository? catalog})
     : _catalog = catalog;
@@ -47,37 +53,95 @@ class _HavenScreenState extends State<HavenScreen> {
   List<CatalogStory>? _catalogStories;
   List<CatalogSound>? _catalogSounds;
 
+  /// This week's 2 featured game keys, synced from the server's
+  /// `/content/catalog` (which already computes the week's pick via
+  /// `rotation.featured_window`). Empty until a sync lands, so [_games]
+  /// falls back to the client-computed [weeklyGames] in the meantime.
+  Set<String> _featuredKeys = const {};
+
   /// Bundled offline fallback soundscapes — these ship in the app and are the
   /// permanent fallback when nothing has synced / a file isn't downloaded yet.
   static const List<_SoundSource> _bundledSounds = [
     _SoundSource(
-      id: 'rolling_deep_sea',
+      id: 'slow_drift',
+      icon: Icons.air,
+      label: 'A Slow Drift',
+      subtitle: 'Hanna Lindgren',
+      bundledAsset: AppAssets.audioAmbientSlowDrift,
+    ),
+    _SoundSource(
+      id: 'forest_birdsong',
+      icon: Icons.forest,
+      label: 'Forest Birdsong',
+      subtitle: 'Nature SFX',
+      bundledAsset: AppAssets.audioAmbientForestBirdsong,
+    ),
+    _SoundSource(
+      id: 'closed_eyes_speak',
+      icon: Icons.visibility_off_outlined,
+      label: 'Closed Eyes Speak',
+      subtitle: 'Calm Shores',
+      bundledAsset: AppAssets.audioAmbientClosedEyesSpeak,
+    ),
+    _SoundSource(
+      id: 'december_im_home',
+      icon: Icons.home_outlined,
+      label: "December, I'm Home",
+      subtitle: 'Johannes Bornlof',
+      bundledAsset: AppAssets.audioAmbientDecemberImHome,
+    ),
+    _SoundSource(
+      id: 'delta_wave_drone',
+      icon: Icons.graphic_eq,
+      label: 'Delta Wave Drone',
+      subtitle: 'Binaural Relaxation',
+      bundledAsset: AppAssets.audioAmbientDeltaWaveDrone,
+    ),
+    _SoundSource(
+      id: 'everbloom',
+      icon: Icons.local_florist_outlined,
+      label: 'Everbloom',
+      subtitle: 'Center of Attention',
+      bundledAsset: AppAssets.audioAmbientEverbloom,
+    ),
+    _SoundSource(
+      id: 'gentle_solace',
+      icon: Icons.spa_outlined,
+      label: 'Gentle Solace',
+      subtitle: 'Amber Glow',
+      bundledAsset: AppAssets.audioAmbientGentleSolace,
+    ),
+    _SoundSource(
+      id: 'recovery_again',
+      icon: Icons.healing_outlined,
+      label: 'Recovery Again',
+      subtitle: 'Elin Piel',
+      bundledAsset: AppAssets.audioAmbientRecoveryAgain,
+    ),
+    _SoundSource(
+      id: 'quiet_spa',
+      icon: Icons.self_improvement,
+      label: 'The Quiet Spa',
+      subtitle: 'Mandala Dreams',
+      bundledAsset: AppAssets.audioAmbientQuietSpa,
+    ),
+    _SoundSource(
+      id: 'lapping_lake',
       icon: Icons.water,
-      label: 'Rolling Deep Sea',
-      subtitle: 'Low Frequency',
-      bundledAsset: AppAssets.audioRollingDeepSea,
-    ),
-    _SoundSource(
-      id: 'steel_hull_rain',
-      icon: Icons.grain,
-      label: 'Steel Hull Rain',
-      subtitle: 'White Noise',
-      bundledAsset: AppAssets.audioSteelHullRain,
-    ),
-    _SoundSource(
-      id: 'foghorn_bell',
-      icon: Icons.notifications_active_outlined,
-      label: 'Foghorn & Bell',
-      subtitle: 'Distant Anchor',
-      bundledAsset: AppAssets.audioFoghornBell,
+      label: 'Lapping Lake Water',
+      subtitle: 'Nature SFX',
+      bundledAsset: AppAssets.audioAmbientLappingLake,
     ),
   ];
 
-  /// Soundscapes to render: server-active ones once synced, else the bundled 3.
+  /// Soundscapes to render: a daily-rotating window of 3, drawn from the
+  /// server-active catalog once synced, else the bundled fallback list.
   List<_SoundSource> get _sounds {
     final cat = _catalogSounds;
-    if (cat == null || cat.isEmpty) return _bundledSounds;
-    return [for (final s in cat) _SoundSource.fromCatalog(s)];
+    final full = cat == null || cat.isEmpty
+        ? _bundledSounds
+        : [for (final s in cat) _SoundSource.fromCatalog(s)];
+    return _dailySounds(DateTime.now(), full);
   }
 
   /// Stories to render: server-active ones once synced, else the bundled 3.
@@ -85,6 +149,14 @@ class _HavenScreenState extends State<HavenScreen> {
     final cat = _catalogStories;
     if (cat == null || cat.isEmpty) return SeaStories.all;
     return cat.map(storyDataFromCatalog).toList();
+  }
+
+  /// This week's 2 games: the server's real pick once synced (filtering the
+  /// full catalog down to just those keys), else a client-computed
+  /// [weeklyGames] fallback so the limit still applies offline/pre-sync.
+  List<GameCatalogEntry> get _games {
+    if (_featuredKeys.isEmpty) return weeklyGames(DateTime.now());
+    return [for (final g in gameCatalog) if (_featuredKeys.contains(g.key)) g];
   }
 
   @override
@@ -111,13 +183,20 @@ class _HavenScreenState extends State<HavenScreen> {
         _catalogSounds = cached.sounds;
       });
     }
+    if (cached.featuredGames.isNotEmpty) {
+      setState(() => _featuredKeys = _keysOf(cached.featuredGames));
+    }
     final fresh = await _catalog.sync();
     if (!mounted || fresh == null) return;
     setState(() {
       _catalogStories = fresh.stories;
       _catalogSounds = fresh.sounds;
+      _featuredKeys = _keysOf(fresh.featuredGames);
     });
   }
+
+  static Set<String> _keysOf(List<FeaturedGame> games) =>
+      {for (final g in games) g.gameKey};
 
   @override
   void dispose() {
@@ -258,6 +337,7 @@ class _HavenScreenState extends State<HavenScreen> {
                       ..._buildTodaysLore(context),
                       const SizedBox(height: 24),
                       _MindGamesSection(
+                        games: _games,
                         onSeeAll: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => const OffWatchGamesScreen(),
@@ -975,24 +1055,56 @@ class _SoundSource {
   /// any new server sound.
   static _SoundSource fromCatalog(CatalogSound sound) {
     const icons = <String, IconData>{
-      'rolling_deep_sea': Icons.water,
-      'steel_hull_rain': Icons.grain,
-      'foghorn_bell': Icons.notifications_active_outlined,
+      'slow_drift': Icons.air,
+      'forest_birdsong': Icons.forest,
+      'closed_eyes_speak': Icons.visibility_off_outlined,
+      'december_im_home': Icons.home_outlined,
+      'delta_wave_drone': Icons.graphic_eq,
+      'everbloom': Icons.local_florist_outlined,
+      'gentle_solace': Icons.spa_outlined,
+      'recovery_again': Icons.healing_outlined,
+      'quiet_spa': Icons.self_improvement,
+      'lapping_lake': Icons.water,
     };
     const bundled = <String, String>{
-      'rolling_deep_sea': AppAssets.audioRollingDeepSea,
-      'steel_hull_rain': AppAssets.audioSteelHullRain,
-      'foghorn_bell': AppAssets.audioFoghornBell,
+      'slow_drift': AppAssets.audioAmbientSlowDrift,
+      'forest_birdsong': AppAssets.audioAmbientForestBirdsong,
+      'closed_eyes_speak': AppAssets.audioAmbientClosedEyesSpeak,
+      'december_im_home': AppAssets.audioAmbientDecemberImHome,
+      'delta_wave_drone': AppAssets.audioAmbientDeltaWaveDrone,
+      'everbloom': AppAssets.audioAmbientEverbloom,
+      'gentle_solace': AppAssets.audioAmbientGentleSolace,
+      'recovery_again': AppAssets.audioAmbientRecoveryAgain,
+      'quiet_spa': AppAssets.audioAmbientQuietSpa,
+      'lapping_lake': AppAssets.audioAmbientLappingLake,
     };
     return _SoundSource(
       id: sound.id,
       icon: icons[sound.id] ?? Icons.music_note,
       label: sound.label,
       subtitle: sound.subtitle,
-      bundledAsset: bundled[sound.id] ?? AppAssets.audioRollingDeepSea,
+      bundledAsset: bundled[sound.id] ?? AppAssets.audioAmbientSlowDrift,
       remoteUrl: sound.mediaUrl,
     );
   }
+}
+
+/// Picks a deterministic, date-driven rotation of [count] sounds from
+/// [catalog] — the same pattern as `story_playback_screen.dart`'s
+/// `dailyLore`. The same local calendar day always yields the same 3 (stable
+/// across app restarts/navigation within a day), and the window advances by
+/// one sound per day, wrapping around so every sound gets fair rotation.
+List<_SoundSource> _dailySounds(
+  DateTime date,
+  List<_SoundSource> catalog, {
+  int count = 3,
+}) {
+  if (catalog.isEmpty) return const [];
+  final localMidnight = DateTime(date.year, date.month, date.day);
+  final dayIndex = localMidnight.millisecondsSinceEpoch ~/ 86400000;
+  final start = dayIndex % catalog.length;
+  final n = count < catalog.length ? count : catalog.length;
+  return List.generate(n, (i) => catalog[(start + i) % catalog.length]);
 }
 
 class _SoundscapeGrid extends StatelessWidget {
@@ -1010,11 +1122,15 @@ class _SoundscapeGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (var i = 0; i < sounds.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(
+    return SizedBox(
+      height: 128,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: sounds.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (context, i) {
+          return SizedBox(
+            width: 108,
             child: _SoundTile(
               icon: sounds[i].icon,
               label: sounds[i].label,
@@ -1023,9 +1139,9 @@ class _SoundscapeGrid extends StatelessWidget {
               playing: active == i && playing,
               onTap: () => onToggle(i),
             ),
-          ),
-        ],
-      ],
+          );
+        },
+      ),
     );
   }
 }
@@ -1118,8 +1234,9 @@ class _SoundTile extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _MindGamesSection extends StatelessWidget {
-  const _MindGamesSection({required this.onSeeAll});
+  const _MindGamesSection({required this.games, required this.onSeeAll});
 
+  final List<GameCatalogEntry> games;
   final VoidCallback onSeeAll;
 
   void _openGame(BuildContext context, GameCatalogEntry game) {
@@ -1148,7 +1265,7 @@ class _MindGamesSection extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Tactile cognitive focus & sensory decompression',
+                    'This week\'s 2 picks — a new pair rotates in weekly',
                     style: AppTextStyles.caption,
                   ),
                 ],
@@ -1170,14 +1287,12 @@ class _MindGamesSection extends StatelessWidget {
         const SizedBox(height: 12),
         SizedBox(
           height: 150,
-          // Every real game shows here — no "featured 2-3" cap — so a newly
-          // added or reworked game is immediately visible for testing.
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: gameCatalog.length,
+            itemCount: games.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, i) {
-              final game = gameCatalog[i];
+              final game = games[i];
               return _GameCard(
                 badge: game.badge,
                 badgeColor: game.accent,
