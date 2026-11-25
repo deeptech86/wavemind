@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
 import '../theme/app_colors.dart';
@@ -229,7 +228,7 @@ class AuthHeader extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SvgPicture.asset(AppAssets.anchorWordmark, width: 20, height: 20),
+            Image.asset(AppAssets.wordmarkGlyph, width: 20, height: 20),
             const SizedBox(width: 8),
             Text('Wavemind', style: AppTextStyles.wordmark),
           ],

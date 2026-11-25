@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/app_assets.dart';
 import '../theme/app_colors.dart';
@@ -88,17 +87,13 @@ class _IllustrationFrame extends StatelessWidget {
           child: Center(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(130),
-              // Source illustration is a framed canvas print with a wide
-              // white matte baked into the export; scale up to crop the
-              // matte away and fill the circle with just the artwork.
-              child: Transform.scale(
-                scale: 1.7,
-                child: Image.asset(
-                  AppAssets.onboardingSailboat,
-                  width: 260,
-                  height: 260,
-                  fit: BoxFit.cover,
-                ),
+              // Full-bleed logo art (already square, no matte to crop) — fit
+              // as-is, unlike the old photo asset this replaced.
+              child: Image.asset(
+                AppAssets.appLogoMark,
+                width: 260,
+                height: 260,
+                fit: BoxFit.cover,
               ),
             ),
           ),
@@ -118,7 +113,7 @@ class _TextContent extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SvgPicture.asset(AppAssets.anchorWordmark, width: 20, height: 20),
+            Image.asset(AppAssets.wordmarkGlyph, width: 20, height: 20),
             const SizedBox(width: 8),
             Text('Wavemind', style: AppTextStyles.wordmark),
           ],

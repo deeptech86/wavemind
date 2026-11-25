@@ -52,6 +52,15 @@ abstract final class AppAssets {
   /// gradient, drawn in-house (vector, not a licensed stock photo).
   static const String avatar = '$_images/avatar_placeholder.svg';
 
+  /// Brand glyph shown beside the "Wavemind" wordmark (Welcome, Login, Signup)
+  /// — the recolored wave/face mark, matching the app icon and feature
+  /// graphic.
+  static const String wordmarkGlyph = '$_images/wordmark_glyph.png';
+
+  /// Full-bleed recolored wave/face logo (same art as the Play Store icon
+  /// and feature graphic) — the Welcome screen's circular hero illustration.
+  static const String appLogoMark = '$_images/app_logo_mark.png';
+
   // --- Audio ------------------------------------------------------------
   // A mix of licensed Epidemic Sound tracks (ambient soundscapes + the Tidal
   // Breath score) and placeholder beds synthesized locally (pure-Python
