@@ -274,17 +274,24 @@ def health() -> dict:
     return {"status": "ok", "service": "wavemind-backend"}
 
 
-# Served at a stable, store-listing-friendly path. The file itself lives in
-# app/static/ so editing it doesn't require touching this route.
-_PRIVACY_POLICY_PATH = os.path.join(
-    os.path.dirname(__file__), "static", "privacy-policy.html"
-)
+# Served at stable, store-listing-friendly paths. The files themselves live
+# in app/static/ so editing them doesn't require touching these routes.
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+
+def _static_page(filename: str) -> HTMLResponse:
+    with open(os.path.join(_STATIC_DIR, filename), "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
 
 
 @app.get("/privacy-policy", response_class=HTMLResponse)
 def privacy_policy() -> HTMLResponse:
-    with open(_PRIVACY_POLICY_PATH, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
+    return _static_page("privacy-policy.html")
+
+
+@app.get("/delete-account", response_class=HTMLResponse)
+def delete_account_info() -> HTMLResponse:
+    return _static_page("delete-account.html")
 
 
 # ---------------------------------------------------------------------------
