@@ -68,9 +68,16 @@ syncs to the server; the per-activity log stays local</td></tr>
 only, never transmitted</td></tr>
 <tr><td>Profile photo</td><td>Stored as a local file on your device only —
 never uploaded anywhere</td></tr>
-<tr><td>Step count, sleep, and heart-rate data (if you connect Health
-Connect)</td><td>Read live for display only — never written to any
-database, on-device or server, and never shared with us or anyone else</td></tr>
+<tr><td>Step count and sleep duration (if you connect Health Connect)</td><td>Read
+live for display only — the raw values are never written to any database,
+on-device or server, and never transmitted by themselves. If you tap "Sync
+Watch Data," we compute a coarse point value from these (e.g. 100 points per
+1,000 steps or per 8 hours slept) and add it to your Fleet Knots total above
+— only that aggregate point number is ever sent, never the step count or
+sleep duration itself</td></tr>
+<tr><td>Heart-rate data (if you connect Health Connect)</td><td>Read live for
+display only — never written to any database, on-device or server, never
+used in any point calculation, and never shared with us or anyone else</td></tr>
 </table>
 
 <h2>What we don't do</h2>
